@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pulse 64</title>
+<style>
+  :root {
+    --page:#e9e9e6; --face1:#dcdcd9; --face2:#c6c6c3; --panel1:#e4e4e1; --panel2:#d8d8d5; --hair:rgba(0,0,0,.14);
+    --ink:#2a2a2a; --dim:#7a7a78; --track:#b9b9b6; --track-in:rgba(0,0,0,.35); --slot:#1a1a1a; --ribbon:#bdbdba;
+    --knob1:#3c3c3c; --knob2:#1a1a1a; --knob3:#0d0d0d; --index:#f4f4f2; --slider1:#3a3a3a; --slider2:#161616;
+    --held:#e8622a; --tick:rgba(0,0,0,.35); --hi:rgba(255,255,255,.8); --shadow:rgba(0,0,0,.35);
+    --pad0:#cfcfcc; --pad1:#a3a3a0; --pad2:#5e5e5c; --pad3:#1a1a1a;
+    color-scheme: light;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--page); color:var(--ink); font:13px/1.3 "Inter", -apple-system, system-ui, "Helvetica Neue", sans-serif; display:flex; flex-direction:column; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none; }
+  .chassis { flex:1; min-height:0; display:flex; }
+  .face { flex:1; min-height:0; display:flex; flex-direction:column; gap:10px; padding:18px 20px 12px; position:relative; border-radius:22px; background:linear-gradient(180deg, var(--face1), var(--face2)); box-shadow:0 30px 60px var(--shadow), 0 2px 0 var(--hi) inset, 0 0 0 1px rgba(0,0,0,.18); }
+
+  .n, .lbl, .sw div.lab, .mini, .tog, .hdr-btn, .cap, .synclab, .barlab { color:var(--ink); font-weight:500; letter-spacing:.12em; text-transform:uppercase; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 22px; padding:4px 4px 12px; border-bottom:1px solid var(--hair); }
+  header > span:first-child { display:flex; align-items:baseline; gap:12px; font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); flex:0 0 auto; }
+  header b { font-weight:600; font-size:15px; letter-spacing:.22em; color:var(--ink); }
+  @media (max-width: 1100px) { header > span:first-child > span { display:none; } }
+  .switches { display:flex; align-items:center; gap:22px; flex:0 0 auto; }
+  .syncgrp { display:flex; align-items:center; gap:10px; }
+  .synclab { font-size:9px; letter-spacing:.22em; }
+  header .btns { margin-left:auto; gap:16px; flex-wrap:nowrap; flex:0 1 auto; }
+  .btns { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  header .mini { flex-direction:row; gap:6px; }
+
+  /* toggles */
+  .tog { display:flex; align-items:center; gap:6px; height:30px; cursor:pointer; touch-action:manipulation; font-size:8px; letter-spacing:.2em; }
+  .tog .track { position:relative; width:44px; height:18px; border-radius:999px; background:var(--track); box-shadow:inset 0 1px 3px var(--track-in), 0 1px 0 var(--hi); }
+  .tog .lever { position:absolute; top:2px; left:2px; width:20px; height:14px; border-radius:999px; background:linear-gradient(180deg, var(--slider1), var(--slider2)); box-shadow:0 2px 4px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.15); transition:left .12s; }
+  .tog.on .lever { left:22px; }
+  .tog.big { height:34px; font-size:9px; letter-spacing:.22em; gap:8px; }
+  .tog.big .track { width:58px; height:22px; }
+  .tog.big .lever { top:2px; left:2px; width:24px; height:18px; }
+  .tog.big.on .lever { left:32px; }
+
+  /* two-position switch */
+  .sw { position:relative; display:grid; grid-template-columns:1fr 1fr; width:190px; height:34px; align-items:center; cursor:pointer; touch-action:none; }
+  .sw::before { content:""; position:absolute; left:50%; top:50%; width:58px; height:22px; margin:-11px 0 0 -29px; border-radius:999px; background:var(--track); box-shadow:inset 0 1px 3px var(--track-in), 0 1px 0 var(--hi); }
+  .sw .k { position:absolute; top:50%; width:24px; height:18px; margin-top:-9px; border-radius:999px; background:linear-gradient(180deg, var(--slider1), var(--slider2)); box-shadow:0 2px 4px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.15); transition:left .12s; left:calc(50% - 27px); }
+  .sw.b .k { left:calc(50% + 3px); }
+  .sw div.lab { font-size:9px; pointer-events:none; }
+  .sw div.lab:first-of-type { text-align:right; padding-right:36px; }
+  .sw div.lab:last-of-type { text-align:left; padding-left:36px; }
+
+  /* push button */
+  .hdr-btn { height:30px; padding:0 14px; border:1px solid var(--hair); border-radius:999px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi), 0 1px 2px rgba(0,0,0,.08); font:inherit; font-size:8px; letter-spacing:.2em; cursor:pointer; color:var(--ink); }
+  .hdr-btn:active { background:var(--track); }
+
+  /* knobs */
+  .fx { display:grid; grid-template-columns:repeat(3, 64px); justify-content:center; gap:18px 22px; margin-top:16px; margin-bottom:6px; }
+  .fx.six { grid-template-columns:repeat(6, 64px); }
+  @media (max-width: 1250px) { .fx.six { grid-template-columns:repeat(3, 64px); } }
+  .mini { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:8px; letter-spacing:.2em; }
+  .mini .md { position:relative; width:38px; height:38px; border-radius:50%; background:radial-gradient(circle at 50% 30%, var(--knob1), var(--knob2) 65%, var(--knob3)); box-shadow:0 6px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); cursor:ns-resize; touch-action:none; }
+  .mini .md .arc { position:absolute; inset:-6px; border-radius:50%; pointer-events:none; }
+  .mini .md .arc::before { content:""; position:absolute; inset:0; border-radius:50%; background:repeating-conic-gradient(from 225deg, var(--dim) 0 2deg, transparent 2deg 27deg); -webkit-mask:radial-gradient(circle, transparent 80%, #000 81%, #000 92%, transparent 93%), conic-gradient(from 225deg, #000 0 272deg, transparent 272deg); -webkit-mask-composite:source-in; mask:radial-gradient(circle, transparent 80%, #000 81%, #000 92%, transparent 93%), conic-gradient(from 225deg, #000 0 272deg, transparent 272deg); mask-composite:intersect; }
+  .mini .md .ptr { position:absolute; left:50%; top:50%; width:2px; height:12px; margin:-15px 0 0 -1px; border-radius:1px; background:var(--index); transform-origin:50% 15px; transform:rotate(var(--r, -135deg)); pointer-events:none; }
+  .mini output { display:none; }
+
+  /* layout */
+  main { flex:1; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); gap:10px; }
+  .voices { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+  @media (max-width: 900px) { .voices { grid-template-columns:1fr; } }
+  .head { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 6px 10px; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi), 0 1px 2px rgba(0,0,0,.08); }
+  .head .n { font-size:9px; letter-spacing:.3em; line-height:30px; text-align:center; }
+  .head .n small { color:var(--dim); letter-spacing:.06em; text-transform:none; margin-left:6px; }
+  .head .btns { position:relative; width:100%; display:flex; align-items:center; height:30px; gap:0; padding:0 4px; }
+  .head .btns .n { position:absolute; left:0; right:0; pointer-events:none; }
+  @media (max-width: 1700px) { .head:not(#kick) .n small { display:none; } }
+  @media (max-width: 1000px) { .head .n small { display:none; } }
+
+  /* sequencer */
+  .seq { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:6px 10px; padding:14px 16px 12px; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi); min-height:0; }
+  .seq .cap { font-size:8px; letter-spacing:.22em; color:var(--dim); }
+  .seq .cap.top { grid-column:2; display:grid; grid-template-columns:repeat(16, minmax(0,1fr)); gap:4px; text-align:center; }
+  .seq .cap.top span:nth-child(4n+1) { color:var(--ink); }
+  .seq .bars { grid-column:1; grid-row:2; display:grid; grid-template-rows:repeat(4, minmax(0,1fr)); gap:6px; align-items:center; }
+  .barlab { font-size:8px; letter-spacing:.22em; color:var(--dim); white-space:nowrap; }
+  .grid { grid-column:2; grid-row:2; display:grid; grid-template-rows:repeat(4, minmax(26px, 72px)); align-content:start; gap:6px; min-height:0; }
+  .seq .bars { grid-template-rows:repeat(4, minmax(26px, 72px)); align-content:start; }
+  .row { display:grid; grid-template-columns:repeat(16, minmax(0,1fr)); gap:4px; min-height:0; }
+  .row .pad:nth-child(4n+1) { margin-left:0; }
+  .row .pad:nth-child(4n) { margin-right:6px; }
+  .row .pad:nth-child(16) { margin-right:0; }
+  .pad { position:relative; min-height:26px; border-radius:8px; background:var(--pad0); box-shadow:inset 0 1px 3px rgba(0,0,0,.28), 0 1px 0 var(--hi); cursor:pointer; touch-action:manipulation; transition:background .08s; }
+  .pad[data-v="1"] { background:var(--pad1); box-shadow:inset 0 1px 2px rgba(0,0,0,.35); }
+  .pad[data-v="2"] { background:var(--pad2); box-shadow:0 3px 6px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.12); }
+  .pad[data-v="3"] { background:var(--pad3); box-shadow:0 4px 8px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); }
+  .pad::after { content:""; position:absolute; left:8px; right:8px; bottom:5px; height:2px; border-radius:1px; background:transparent; }
+  .pad.now::after { background:var(--tick); }
+  .pad.now[data-v]:not([data-v="0"])::after { background:var(--held); }
+  .seq .foot { grid-column:1 / -1; display:flex; justify-content:space-between; align-items:center; font-size:8px; letter-spacing:.22em; color:var(--dim); text-transform:uppercase; padding-top:2px; }
+  .seq .foot b { font-weight:500; color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="chassis"><div class="face">
+  <header>
+    <span><b>PULSE 64</b><span>ambient drum machine · half-time · one voice</span></span>
+    <div class="switches">
+      <div class="syncgrp"><span class="synclab">Run</span><div class="tog big" id="run" role="switch"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div></div>
+      <div class="sw" id="pat"><div class="lab">Calm</div><div class="k"></div><div class="lab">Busy</div></div>
+      <div class="syncgrp"><span class="synclab">Mutate</span><div class="tog big" id="mutate" role="switch" title="Edit two steps every pass so the loop never repeats exactly"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div></div>
+      <button class="hdr-btn" id="clear">Clear</button>
+    </div>
+    <div class="btns">
+      <div class="mini" id="tempo"><span>Tempo</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+      <div class="mini" id="swing"><span>Loose</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+      <div class="mini" id="level"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="voices">
+      <section class="head" id="kick">
+        <div class="btns"><div class="tog on" id="kick-on"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Kick <small>two tones, dead short</small></div><span></span></div>
+        <div class="fx six">
+          <div class="mini" data-k="tune"><span>Tune</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="partner"><span>Partner</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="decay"><span>Decay</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="knock"><span>Knock</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="room"><span>Room</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="klevel"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+        </div>
+      </section>
+      <section class="head" id="dust">
+        <div class="btns"><div class="tog on" id="dust-on"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Dust <small>the hi-hat that never is</small></div><span></span></div>
+        <div class="fx">
+          <div class="mini" data-k="density"><span>Density</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="bright"><span>Bright</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="dlevel"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+        </div>
+      </section>
+      <section class="head" id="swell">
+        <div class="btns"><div class="tog" id="swell-on"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Swell <small>the wash that isn't a crash</small></div><span></span></div>
+        <div class="fx">
+          <div class="mini" data-k="every"><span>Every</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="dark"><span>Dark</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="slevel"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="seq" id="seq">
+      <div class="cap top" id="steps"></div>
+      <div class="bars"><div class="barlab">Bar 1</div><div class="barlab">Bar 2</div><div class="barlab">Bar 3</div><div class="barlab">Bar 4</div></div>
+      <div class="grid" id="grid"></div>
+      <div class="foot"><span>Tap a step: rest · soft · mid · loud</span><span id="readout"><b>65</b> bpm · 16th grid · 4 bars</span></div>
+    </section>
+  </main>
+</div></div>
+
+<script>
+'use strict';
+// ---------- patterns lifted from SVLBRD "Hvit" (65 BPM grid) ----------
+// . rest  o soft  x mid  X loud
+const PATTERNS = {
+  calm: 'x....x.........x' + '..x....o..o.....' + '.x...x.........o' + '.xo....x..o.....',
+  busy: 'x.xx.x..x..x....' + '..x..x..........' + '.x.oo...x..xx..o' + '.x..o...........',
+};
+const VMAP = { '.': 0, 'o': 1, 'x': 2, 'X': 3 };
+const VEL = [0, 0.2, 0.5, 1.0];             // rest, -14 dB, -6 dB, 0 dB
+const STEPS = 64;
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, f) => a + (b - a) * f;
+const expo = (a, b, f) => a * Math.pow(b / a, f);
+
+// ---------- state ----------
+const P = {
+  bpm: 65, loose: 0, level: 1.0,
+  kickOn: true, tune: 52, partner: 0.8, decay: 0.072, knock: 0.06, room: 0.15, klevel: 0.9,
+  dustOn: true, density: 4, bright: 3000, dlevel: 0.5,
+  swellOn: false, every: 10, dark: 1200, slevel: 0.4,
+  mutate: false, running: false,
+};
+let seq = new Array(STEPS).fill(0);
+function loadPattern(name) {
+  const s = PATTERNS[name].replace(/[^.oxX]/g, '');
+  seq = new Array(STEPS).fill(0).map((_, i) => VMAP[s[i] || '.'] || 0);
+  renderGrid();
+}
+
+// ---------- audio ----------
+let ac = null, master, limiter, drive, kickBus, roomSend, roomConv, dustHP, dustGain, swellLP, swellGain, noiseBuf, clickBufs = [];
+function ensureAudio() {
+  if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+  ac = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  const sr = ac.sampleRate;
+  limiter = ac.createDynamicsCompressor();
+  limiter.threshold.value = -3; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.001; limiter.release.value = 0.08;
+  master = ac.createGain(); master.gain.value = P.level;
+  drive = ac.createGain(); drive.gain.value = 2.5;              // +8 dB into the limiter
+  drive.connect(limiter); limiter.connect(master); master.connect(ac.destination);
+
+  kickBus = ac.createGain(); kickBus.gain.value = P.klevel; kickBus.connect(drive);
+  // short dark room: 0.9 s decaying noise, lowpassed, as a send
+  roomConv = ac.createConvolver();
+  const irLen = Math.floor(0.9 * sr), ir = ac.createBuffer(2, irLen, sr);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); let lp = 0; for (let i = 0; i < irLen; i++) { lp += (Math.random() * 2 - 1 - lp) * 0.08; d[i] = lp * Math.pow(1 - i / irLen, 3); } }
+  roomConv.buffer = ir;
+  roomSend = ac.createGain(); roomSend.gain.value = P.room;
+  roomSend.connect(roomConv); roomConv.connect(drive);
+
+  dustHP = ac.createBiquadFilter(); dustHP.type = 'highpass'; dustHP.frequency.value = P.bright; dustHP.Q.value = 0.7;
+  dustGain = ac.createGain(); dustGain.gain.value = P.dlevel * 0.012;
+  dustHP.connect(dustGain); dustGain.connect(drive);
+
+  swellLP = ac.createBiquadFilter(); swellLP.type = 'lowpass'; swellLP.frequency.value = P.dark; swellLP.Q.value = 0.5;
+  swellGain = ac.createGain(); swellGain.gain.value = P.slevel * 0.05;
+  swellLP.connect(swellGain); swellGain.connect(drive);
+
+  noiseBuf = ac.createBuffer(1, Math.floor(0.1 * sr), sr);
+  { const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  for (let k = 0; k < 8; k++) {                         // assorted sub-millisecond clicks
+    const n = 4 + Math.floor(Math.random() * 16), b = ac.createBuffer(1, n, sr), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / n * 3);
+    clickBufs.push(b);
+  }
+}
+
+function kick(t, v) {
+  const f0 = P.tune, tau = P.decay, g = ac.createGain();
+  g.connect(kickBus); g.connect(roomSend);
+  // tone 1: f0+4 gliding to f0
+  const o1 = ac.createOscillator(); o1.type = 'sine';
+  o1.frequency.setValueAtTime(f0 + 4, t); o1.frequency.setTargetAtTime(f0, t, 0.04);
+  const g1 = ac.createGain(); g1.gain.setValueAtTime(0, t); g1.gain.linearRampToValueAtTime(0.6 * v, t + 0.0015); g1.gain.setTargetAtTime(0, t + 0.0015, tau);
+  o1.connect(g1); g1.connect(g);
+  // tone 2: partner a major sixth up, faster decay
+  const o2 = ac.createOscillator(); o2.type = 'sine';
+  o2.frequency.setValueAtTime(f0 * 1.66 + 6, t); o2.frequency.setTargetAtTime(f0 * 1.66, t, 0.04);
+  const g2 = ac.createGain(); g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.48 * v * P.partner, t + 0.0015); g2.gain.setTargetAtTime(0, t + 0.0015, tau * 0.62);
+  o2.connect(g2); g2.connect(g);
+  // knock: 30 ms of band-passed noise
+  const n = ac.createBufferSource(); n.buffer = noiseBuf;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 450; bp.Q.value = 0.8;
+  const g3 = ac.createGain(); g3.gain.setValueAtTime(0.5 * v * P.knock, t); g3.gain.setTargetAtTime(0, t, 0.03);
+  n.connect(bp); bp.connect(g3); g3.connect(g);
+  o1.start(t); o2.start(t); n.start(t);
+  const end = t + Math.max(0.6, tau * 6);
+  o1.stop(end); o2.stop(end); n.stop(t + 0.1);
+}
+function click(t) {
+  const s = ac.createBufferSource(); s.buffer = clickBufs[Math.floor(Math.random() * clickBufs.length)];
+  const g = ac.createGain(); const a = Math.random(); g.gain.value = a * a;
+  s.connect(g); g.connect(dustHP); s.start(t);
+}
+function swell(t) {
+  const notes = [587.3, 659.3, 740, 784, 880];         // D5 E5 F#5 G5 A5, the drone's upper partials
+  const pick = notes.filter(() => Math.random() < 0.55);
+  if (!pick.length) pick.push(notes[1]);
+  const g = ac.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1 / pick.length, t + 0.4); g.gain.setTargetAtTime(0, t + 0.4, 0.55);
+  g.connect(swellLP);
+  pick.forEach(f => { const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * Math.pow(2, (Math.random() * 8 - 4) / 1200); o.connect(g); o.start(t); o.stop(t + 3.5); });
+}
+
+// ---------- scheduler ----------
+let step = 0, nextStepTime = 0, timer = null, nextDust = 0, nextSwell = 0, pass = 0;
+const LOOK = 0.12, TICK = 25;
+function stepDur() { return 60 / P.bpm / 4; }
+function schedule() {
+  const now = ac.currentTime;
+  while (nextStepTime < now + LOOK) {
+    const v = seq[step];
+    if (v && P.kickOn) {
+      const jitter = P.loose ? (Math.random() * 2 - 1) * P.loose * 0.02 : 0;
+      kick(nextStepTime + Math.max(0, jitter), VEL[v]);
+    }
+    const s = step, at = nextStepTime;
+    setTimeout(() => markStep(s), Math.max(0, (at - ac.currentTime) * 1000));
+    nextStepTime += stepDur();
+    step = (step + 1) % STEPS;
+    if (step === 0) { pass++; if (P.mutate) mutate(); }
+  }
+  if (P.dustOn) { while (nextDust < now + LOOK) { click(nextDust); nextDust += -Math.log(1 - Math.random()) / P.density; } }
+  else nextDust = now + LOOK;
+  if (P.swellOn) { while (nextSwell < now + LOOK) { swell(nextSwell); nextSwell += P.every * (0.7 + Math.random() * 0.6); } }
+  else nextSwell = now + LOOK + 1;
+}
+function setRunning(on) {
+  P.running = on; $('run').classList.toggle('on', on);
+  if (on) {
+    ensureAudio(); step = 0; nextStepTime = ac.currentTime + 0.05; nextDust = nextStepTime; nextSwell = nextStepTime + 2;
+    if (!timer) timer = setInterval(schedule, TICK);
+  } else { clearInterval(timer); timer = null; markStep(-1); }
+}
+function mutate() {                                     // two edits per pass, keep it on the "e" and "a"
+  const off = [], on = [];
+  seq.forEach((v, i) => { if (v) off.push(i); else if (i % 4 === 1 || i % 4 === 3) on.push(i); });
+  if (off.length > 6 && Math.random() < 0.7) seq[off[Math.floor(Math.random() * off.length)]] = 0;
+  if (on.length && Math.random() < 0.7) seq[on[Math.floor(Math.random() * on.length)]] = 1 + Math.floor(Math.random() * 2);
+  renderGrid();
+}
+
+// ---------- grid ----------
+const pads = [];
+function buildGrid() {
+  const g = $('grid'), cap = $('steps');
+  for (let i = 0; i < 16; i++) { const s = document.createElement('span'); s.textContent = i % 4 === 0 ? (i / 4 + 1) : ['', 'e', '&', 'a'][i % 4]; cap.appendChild(s); }
+  for (let r = 0; r < 4; r++) {
+    const row = document.createElement('div'); row.className = 'row';
+    for (let c = 0; c < 16; c++) {
+      const i = r * 16 + c, p = document.createElement('div'); p.className = 'pad'; p.dataset.v = 0;
+      p.addEventListener('pointerdown', e => { e.preventDefault(); ensureAudio(); seq[i] = (seq[i] + 1) % 4; p.dataset.v = seq[i]; if (seq[i] && !P.running) kick(ac.currentTime + 0.01, VEL[seq[i]]); });
+      row.appendChild(p); pads.push(p);
+    }
+    g.appendChild(row);
+  }
+}
+function renderGrid() { pads.forEach((p, i) => p.dataset.v = seq[i]); }
+let lastMark = -1;
+function markStep(i) { if (lastMark >= 0) pads[lastMark].classList.remove('now'); if (i >= 0) pads[i].classList.add('now'); lastMark = i; }
+
+// ---------- controls ----------
+function miniDial(root, get, set, fmt) {
+  const md = root.querySelector('.md'), out = root.querySelector('output');
+  const render = () => { const f = get(); md.style.setProperty('--r', (-135 + f * 270) + 'deg'); out.textContent = fmt ? fmt(f) : ''; };
+  let id = null, y0 = 0, f0 = 0;
+  md.addEventListener('pointerdown', e => { ensureAudio(); try { md.setPointerCapture(e.pointerId); } catch (_) {} id = e.pointerId; y0 = e.clientY; f0 = get(); });
+  md.addEventListener('pointermove', e => { if (id !== e.pointerId) return; set(clamp(f0 + (y0 - e.clientY) / 140, 0, 1)); render(); });
+  const up = e => { if (id === e.pointerId) id = null; };
+  md.addEventListener('pointerup', up); md.addEventListener('pointercancel', up);
+  md.addEventListener('wheel', e => { e.preventDefault(); set(clamp(get() - e.deltaY / 600, 0, 1)); render(); }, { passive: false });
+  render(); return render;
+}
+const K = sel => document.querySelector(sel);
+const readout = () => { $('readout').innerHTML = `<b>${Math.round(P.bpm)}</b> bpm · 16th grid · 4 bars`; };
+miniDial($('tempo'), () => (P.bpm - 50) / 40, f => { P.bpm = 50 + f * 40; readout(); });
+miniDial($('swing'), () => P.loose, f => { P.loose = f; });
+miniDial($('level'), () => P.level / 1.5, f => { P.level = f * 1.5; if (master) master.gain.setTargetAtTime(P.level, ac.currentTime, 0.02); });
+miniDial(K('[data-k=tune]'), () => (P.tune - 40) / 30, f => { P.tune = 40 + f * 30; });
+miniDial(K('[data-k=partner]'), () => P.partner, f => { P.partner = f; });
+miniDial(K('[data-k=decay]'), () => Math.log(P.decay / 0.03) / Math.log(0.3 / 0.03), f => { P.decay = expo(0.03, 0.3, f); });
+miniDial(K('[data-k=knock]'), () => P.knock / 0.3, f => { P.knock = f * 0.3; });
+miniDial(K('[data-k=room]'), () => P.room / 0.6, f => { P.room = f * 0.6; if (roomSend) roomSend.gain.setTargetAtTime(P.room, ac.currentTime, 0.02); });
+miniDial(K('[data-k=klevel]'), () => P.klevel, f => { P.klevel = f; if (kickBus) kickBus.gain.setTargetAtTime(f, ac.currentTime, 0.02); });
+miniDial(K('[data-k=density]'), () => Math.log(P.density / 0.5) / Math.log(20 / 0.5), f => { P.density = expo(0.5, 20, f); });
+miniDial(K('[data-k=bright]'), () => Math.log(P.bright / 1500) / Math.log(9000 / 1500), f => { P.bright = expo(1500, 9000, f); if (dustHP) dustHP.frequency.setTargetAtTime(P.bright, ac.currentTime, 0.02); });
+miniDial(K('[data-k=dlevel]'), () => P.dlevel, f => { P.dlevel = f; if (dustGain) dustGain.gain.setTargetAtTime(f * 0.012, ac.currentTime, 0.02); });
+miniDial(K('[data-k=every]'), () => (P.every - 4) / 16, f => { P.every = 4 + f * 16; });
+miniDial(K('[data-k=dark]'), () => Math.log(P.dark / 400) / Math.log(4000 / 400), f => { P.dark = expo(400, 4000, f); if (swellLP) swellLP.frequency.setTargetAtTime(P.dark, ac.currentTime, 0.02); });
+miniDial(K('[data-k=slevel]'), () => P.slevel, f => { P.slevel = f; if (swellGain) swellGain.gain.setTargetAtTime(f * 0.05, ac.currentTime, 0.02); });
+
+function toggle(id, key) { const el = $(id); el.addEventListener('pointerdown', e => { e.preventDefault(); ensureAudio(); P[key] = !P[key]; el.classList.toggle('on', P[key]); }); }
+toggle('kick-on', 'kickOn'); toggle('dust-on', 'dustOn'); toggle('swell-on', 'swellOn'); toggle('mutate', 'mutate');
+$('run').addEventListener('pointerdown', e => { e.preventDefault(); setRunning(!P.running); });
+$('clear').addEventListener('pointerdown', e => { e.preventDefault(); seq.fill(0); renderGrid(); });
+let patB = false;
+$('pat').addEventListener('pointerdown', e => { e.preventDefault(); patB = !patB; $('pat').classList.toggle('b', patB); loadPattern(patB ? 'busy' : 'calm'); });
+window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); setRunning(!P.running); } });
+
+buildGrid(); loadPattern('calm'); readout();
+</script>
+</body>
+</html>
