@@ -66,7 +66,7 @@
   .mini output { display:none; }
 
   /* layout */
-  main { flex:1; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); gap:10px; }
+  main { flex:1; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:10px; }
   .voices { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
   @media (max-width: 900px) { .voices { grid-template-columns:1fr; } }
   .head { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 6px 10px; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi), 0 1px 2px rgba(0,0,0,.08); }
@@ -76,6 +76,23 @@
   .head .btns .n { position:absolute; left:0; right:0; pointer-events:none; }
   @media (max-width: 1700px) { .head:not(#kick) .n small { display:none; } }
   @media (max-width: 1000px) { .head .n small { display:none; } }
+
+  /* Shruti boxes under the sequencer: a reed or pad voice behind a bellows (Box 2, Box 3) and the Radio box (Box 4) */
+  .boxes { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
+  @media (max-width: 900px) { .boxes { grid-template-columns:1fr; } }
+  .boxes .head { padding-bottom:14px; }
+  .boxes .head .btns .oct { margin-left:auto; position:relative; z-index:1; }
+  .boxes .head .n small { display:inline-block; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
+  .boxes .fx { margin-top:22px; }
+  .boxes .mini .md { order:-1; }
+  .vsw { position:relative; width:160px; height:124px; margin:6px auto 0; cursor:pointer; touch-action:none; }
+  .vsw .vk { position:absolute; left:50%; top:40px; width:52px; height:52px; margin-left:-26px; border-radius:50%; background:radial-gradient(circle at 50% 30%, var(--knob1), var(--knob2) 65%, var(--knob3)); box-shadow:0 8px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); }
+  .vsw .vptr { position:absolute; left:50%; top:50%; width:3px; height:20px; margin:-24px 0 0 -1.5px; border-radius:2px; background:var(--index); transform-origin:50% 24px; transform:rotate(var(--r, -135deg)); transition:transform .12s; }
+  .vsw .vlabels div { position:absolute; font-size:8.5px; letter-spacing:.14em; transform:translate(-50%, -50%); white-space:nowrap; color:var(--ink); font-weight:500; text-transform:uppercase; }
+  .oct { position:relative; height:30px; padding:0 8px 0 56px; border:0; background:transparent; font:inherit; font-size:8px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink); font-weight:500; cursor:pointer; touch-action:manipulation; }
+  .oct::before { content:""; position:absolute; left:6px; top:50%; width:44px; height:18px; margin-top:-9px; border-radius:999px; background:var(--track); box-shadow:inset 0 1px 3px var(--track-in), 0 1px 0 var(--hi); }
+  .oct::after { content:""; position:absolute; left:8px; top:50%; width:20px; height:14px; margin-top:-7px; border-radius:999px; background:linear-gradient(180deg, var(--slider1), var(--slider2)); box-shadow:0 2px 4px rgba(0,0,0,.35); transition:left .12s; }
+  .oct.on::after { left:28px; }
 
   /* sequencer */
   .seq { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:6px 10px; padding:14px 16px 12px; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi); min-height:0; }
@@ -155,6 +172,8 @@
       <div class="grid" id="grid"></div>
       <div class="foot"><span>Tap a step: rest · soft · mid · loud</span><span id="readout"><b>65</b> bpm · 16th grid · 4 bars</span></div>
     </section>
+
+    <div class="boxes" id="boxes"></div>
   </main>
 </div></div>
 
@@ -360,6 +379,294 @@ $('pat').addEventListener('pointerdown', e => { e.preventDefault(); patB = !patB
 window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); setRunning(!P.running); } });
 
 buildGrid(); loadPattern('calm'); readout();
+</script>
+<script>
+'use strict';
+// ---------- Shruti boxes: Box 2 and Box 3 are drone voices behind a bellows, Box 4 is the Radio box. Ported from generativeVibeBox/shruti-panel.html.
+// They share this app's audio context, drive stage, limiter and Level knob. Header controls of the original are fixed here:
+// interval = fifth, Age 0.42, Breath 0.5, Width 0.5, fader at the middle. No fader, no ribbon, no sync.
+(() => {
+const HOME_HZ = 123.47;                                  // B2
+const I_RATIO = 3 / 2;                                   // the fifth
+const AGE = 0.42, BREATH = 0.5, WIDTH = 0.5, V = 0.5;    // fixed header settings and fader position
+const driftCents = 25 * AGE, widthCents = 12 * WIDTH, BOX_OFFSETS = { 2: 3.5, 3: -2.5, 4: 5 };
+const VOICES = {
+  reed:   { name: 'Reed',  wave: 'reed', lp: 1,    attack: 0.28, root: 1,   slots: [['1', 1], ['I', 1], ['2', 1]] },
+  tropo:  { name: 'Bed',   wave: 'dark', lp: 0.52, attack: 2.0,  root: 2, gain: 2.0, slots: [['2', 1], ['I', 0.45], ['4', 0.65], ['2I', 0.5], ['4I', 0.2]] },
+  strato: { name: 'Deep',  wave: 'dark', lp: 0.18, attack: 2.0,  root: 1, gain: 1.1, slots: [['1', 1], ['I/2', 0.7], ['1/2', 0.35], ['I', 0.5], ['2', 0.3]] },
+  meso:   { name: 'Haze',  wave: 'dark', lp: 0.30, attack: 3.0,  root: 2, gain: 2.2, slots: [['2', 1], ['I', 0.3], ['2I', 0.5], ['4', 0.3], ['9/2', 0.08]] },
+  thermo: { name: 'Pulse', wave: 'dark', lp: 0.14, attack: 1.5,  root: 1, gain: 1.1, slots: [['1', 1], ['I/2', 0.5], ['I', 0.45], ['2', 0.3]] },
+  exo:    { name: 'Glow',  wave: 'dark', lp: 3.2,  attack: 2.5,  root: 2, gain: 1.6, slots: [['2', 1], ['2I', 0.6], ['4', 0.85], ['4I', 0.55], ['8', 0.6], ['8I', 0.3]] },
+};
+const ratioOf = s => ({ '1': 1, '2': 2, '4': 4, '8': 8, '1/2': 0.5, '9/2': 4.5, 'I': I_RATIO, 'I/2': I_RATIO / 2, '2I': 2 * I_RATIO, '4I': 4 * I_RATIO, '8I': 8 * I_RATIO })[s];
+const RATE_MIN = 1 / 40, RATE_MAX = 6, HOLD_RATE = 1 / 36;
+const now = () => ac.currentTime;
+let S = null;
+const boxes = [];
+
+// Radio sources: openmhz police systems (one clip per call, seconds behind air) and one non-commercial scanner stream. See generativeVibeBox/docs/RADIO.md.
+const om = (name, sys, tg = null) => ({ kind: 'omhz', name, sys, tg });
+const BANDS = [
+  { id: 'chicago', name: 'Chicago', ch: [
+    om('Chicago PD · all zones', 'chi_cpd'), om('Chicago PD · zone 12', 'chi_cpd', [12]), om('Chicago PD · zone 6', 'chi_cpd', [6]), om('Chicago PD · zone 10', 'chi_cpd', [10]),
+    om('Chicago PD · zone 7', 'chi_cpd', [7]), om('Chicago PD · zone 4 downtown', 'chi_cpd', [4]), om('Chicago PD · citywide', 'chi_cpd', [14]),
+    { kind: 'stream', name: 'San Francisco public safety', url: 'https://ice2.somafm.com/scanner-128-mp3' } ] },
+  { id: 'ohio', name: 'Ohio', ch: [
+    om('Southwest Ohio · all', 'hltnps'), om('Cincinnati · district 3', 'hltnps', [55651]), om('Cincinnati · district 1', 'hltnps', [55649]), om('Cincinnati · district 4', 'hltnps', [55652]),
+    om('Butler County · road patrol', 'hltnps', [9179]), om('Akron area · police 2', 'marcs_sc', [62661]), om('Akron area · police 1', 'marcs_sc', [45509]), om('Licking area · sheriffs', 'licking', [54856, 54824, 28503]) ] },
+  { id: 'nj', name: 'New Jersey', ch: [
+    om('Union County · all', 'njicsunion'), om('Roselle PD', 'njicsunion', [4429]), om('Elizabeth PD', 'njicsunion', [4241]), om('Union County park police', 'njicsunion', [1541]),
+    om('Fanwood · Scotch Plains PD', 'njicsunion', [4571]), om('Cranford PD', 'njicsunion', [6095]), om('Montclair · South Orange PD', 'njicsunion', [4341, 4663]), om('Morris County · all', 'morrisco') ] },
+  { id: 'houston', name: 'Houston', ch: [
+    om('NW Harris County · all', 'nwhc'), om('Precinct 4 constables', 'nwhc', [711]), om('Toll road police', 'nwhc', [651, 647]), om('Sheriff · district 4 west', 'nwhc', [563]),
+    om('Sheriff · district 1 north', 'nwhc', [345]), om('Galveston County · all', 'galveston'), om('San Antonio · Bexar County', 'bexar'), om('Dallas · NTIRN', 'ntirnd1') ] },
+];
+const CH_PER_BAND = 8, SCAN_AFTER_S = { omhz: 600, stream: 1e9 }, BACKLOG = 4;
+const radioBand = b => BANDS[b.radio.band];
+const radioIndex = b => (Math.min(CH_PER_BAND - 1, Math.floor(b.radio.chf * CH_PER_BAND)) + b.radio.scan) % CH_PER_BAND;
+const radioChannel = b => radioBand(b).ch[radioIndex(b)];
+const minCallS = b => 3 * b.radio.squelch;
+
+// ---------- engine ----------
+function periodic(N, amp) { const re = new Float32Array(N), im = new Float32Array(N); for (let n = 1; n < N; n++) im[n] = amp(n); return ac.createPeriodicWave(re, im); }
+function ensure() {
+  ensureAudio();
+  if (S) return;
+  const g = v => { const n = ac.createGain(); n.gain.value = v; return n; };
+  S = { g };
+  S.wave = periodic(64, n => { let a = 1 / Math.pow(n, 1.05); if (n >= 3 && n <= 7) a *= 1.35; if (n > 30) a *= Math.pow(0.9, n - 30); return a; });
+  S.dark = periodic(24, n => 1 / Math.pow(n, 1.7));
+  S.body = g(1);
+  S.f1 = ac.createBiquadFilter(); S.f1.type = 'peaking'; S.f1.frequency.value = 620; S.f1.Q.value = 1.6; S.f1.gain.value = 5;
+  S.f2 = ac.createBiquadFilter(); S.f2.type = 'peaking'; S.f2.frequency.value = 1750; S.f2.Q.value = 2.2; S.f2.gain.value = 4;
+  S.hp = ac.createBiquadFilter(); S.hp.type = 'highpass'; S.hp.frequency.value = 70;
+  S.out = g(0.6);
+  S.body.connect(S.f1).connect(S.f2).connect(S.hp).connect(S.out).connect(drive);   // into the app's drive stage and limiter
+  S.conv = ac.createConvolver(); S.revLp = ac.createBiquadFilter(); S.revLp.type = 'lowpass'; S.revLp.frequency.value = 4500; S.revOut = g(0.9);
+  const len = Math.floor(ac.sampleRate * 3.5), ir = ac.createBuffer(2, len, ac.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.57); }
+  S.conv.buffer = ir; S.conv.connect(S.revLp).connect(S.revOut).connect(S.out);
+  const nl = ac.sampleRate * 2, nb = ac.createBuffer(1, nl, ac.sampleRate), nd = nb.getChannelData(0);
+  for (let i = 0; i < nl; i++) nd[i] = Math.random() * 2 - 1;
+  S.noise = ac.createBufferSource(); S.noise.buffer = nb; S.noise.loop = true; S.noise.start();
+  S.nbp = ac.createBiquadFilter(); S.nbp.type = 'bandpass'; S.nbp.frequency.value = 2600; S.nbp.Q.value = 0.7; S.noise.connect(S.nbp);
+  boxes.forEach(buildBox);
+}
+function gritCurve(gr) { const N = 2048, c = new Float32Array(N), amt = gr * gr; for (let i = 0; i < N; i++) { const x = i / (N - 1) * 2 - 1; c[i] = x * (1 - amt) + Math.sin(x * (1 + 6 * gr) * Math.PI / 2) * amt; } return c; }
+function driveCurve(d) { const N = 2048, c = new Float32Array(N), hard = Math.max(0, (d - 0.5) * 2); for (let i = 0; i < N; i++) { const x = i / (N - 1) * 2 - 1; c[i] = (Math.tanh(1.6 * x) / Math.tanh(1.6)) * (1 - hard) + Math.max(-1, Math.min(1, x * 2.5)) * hard; } return c; }
+function buildBox(b) {
+  const g = S.g, a = { reeds: {} };
+  a.sum = g(1);
+  a.lp = ac.createBiquadFilter(); a.lp.type = 'lowpass'; a.lp.frequency.value = 2500; a.lp.Q.value = 0.3;
+  a.pressure = g(0); a.pre = g(1); a.post = g(1);
+  a.shaper = ac.createWaveShaper(); a.shaper.oversample = '2x'; a.shaper.curve = driveCurve(b.drive);
+  a.level = g(b.vol * b.vol); a.pan = ac.createStereoPanner(); a.pan.pan.value = b.pan;
+  a.fold = ac.createWaveShaper(); a.fold.oversample = '2x'; a.fold.curve = gritCurve(b.grit);
+  a.pres = ac.createBiquadFilter(); a.pres.type = 'peaking'; a.pres.frequency.value = 3000; a.pres.Q.value = 0.9; a.pres.gain.value = 0;
+  a.sum.connect(a.pre).connect(a.shaper).connect(a.post).connect(a.fold).connect(a.pres).connect(a.lp).connect(a.pressure).connect(a.level).connect(a.pan).connect(S.body);
+  a.send = g(b.room); a.pan.connect(a.send).connect(S.conv);
+  a.ngain = g(0); S.nbp.connect(a.ngain).connect(a.pressure);
+  a.bend = ac.createConstantSource(); a.bend.offset.value = 0; a.bend.start();
+  b.a = a;
+  if (b.radio) {   // radio audio enters where the reeds would: band-limited to voice, then the squelch gate
+    a.radioIn = g(1); a.rhp = ac.createBiquadFilter(); a.rhp.type = 'highpass'; a.rhp.frequency.value = 280;
+    a.rlp = ac.createBiquadFilter(); a.rlp.type = 'lowpass'; a.rlp.frequency.value = 3200; a.gate = g(0);
+    a.radioIn.connect(a.rhp).connect(a.rlp).connect(a.gate).connect(a.sum);
+    return;
+  }
+  buildVoice(b); applyReeds(b);
+}
+const reedHz = (b, slot) => HOME_HZ * ratioOf(slot) * (b.oct ? 0.5 : 1);
+const reedDet = (b, sgn) => BOX_OFFSETS[b.n] + sgn * widthCents;
+function buildVoice(b) {
+  const a = b.a, g = S.g, Vc = VOICES[b.voice], wave = Vc.wave === 'reed' ? S.wave : S.dark;
+  a.reeds = {};
+  Vc.slots.forEach(([slot, lvl], i) => {
+    const merge = ac.createChannelMerger(2), gate = g(0);
+    const side = (sgn, k) => {
+      const o = ac.createOscillator(); o.setPeriodicWave(wave); o.frequency.value = reedHz(b, slot); o.detune.value = reedDet(b, sgn);
+      const lfo = ac.createOscillator(), lg = g(driftCents); lfo.frequency.value = 1 / (15 + i * 6.3 + b.n * 2.7 + k * 4.1);
+      lfo.connect(lg).connect(o.detune); a.bend.connect(o.detune); o.connect(merge, 0, k); o.start(); lfo.start();
+      return { o, lfo };
+    };
+    const L = side(-1, 0), R = side(1, 1);
+    merge.connect(gate).connect(a.sum);
+    a.reeds[slot] = { o: L.o, oR: R.o, lfoL: L.lfo, lfoR: R.lfo, gate, spec: lvl };
+  });
+}
+function levelFor(b, slot) {
+  const r = b.a.reeds[slot];
+  if (b.voice === 'reed') return slot === '1' ? 0.16 : slot === '2' ? 0.03 + 0.14 * V : 0.09 + 0.07 * V;
+  const Vc = VOICES[b.voice], ratio = ratioOf(slot); return 0.17 * (Vc.gain || 1) * r.spec * (ratio > Vc.root * 1.6 ? 0.5 + 0.7 * V : 1);
+}
+function applyReeds(b) {
+  if (!b.a || b.radio) return;
+  const Vc = VOICES[b.voice];
+  Object.entries(b.a.reeds).forEach(([slot, r]) => {
+    const t = now(), lvl = levelFor(b, slot), gn = r.gate.gain;
+    gn.cancelScheduledValues(t); gn.setValueAtTime(gn.value, t);
+    if (b.on && gn.value < 0.005) {
+      gn.linearRampToValueAtTime(lvl, t + Vc.attack);
+      if (b.voice === 'reed') [[r.o, -1], [r.oR, 1]].forEach(([o, sg]) => { o.detune.cancelScheduledValues(t); o.detune.setValueAtTime(reedDet(b, sg) - 25, t); o.detune.linearRampToValueAtTime(reedDet(b, sg), t + 0.35); });
+    } else if (b.on) gn.linearRampToValueAtTime(lvl, t + 0.1);
+    else gn.linearRampToValueAtTime(0, t + (b.voice === 'reed' ? 0.18 : 0.8));
+  });
+}
+function setVoice(b, id) {
+  if (!VOICES[id] || id === b.voice) return;
+  b.voice = id; renderBox(b);
+  if (!b.a) return;
+  const old = b.a.reeds, t = now();
+  Object.values(old).forEach(r => { r.gate.gain.cancelScheduledValues(t); r.gate.gain.setValueAtTime(r.gate.gain.value, t); r.gate.gain.linearRampToValueAtTime(0, t + 0.6); });
+  setTimeout(() => Object.values(old).forEach(r => { r.o.stop(); r.oR.stop(); r.lfoL.stop(); r.lfoR.stop(); r.gate.disconnect(); }), 800);
+  buildVoice(b); applyReeds(b);
+}
+function setOct(b, on) { b.oct = on; if (b.a) Object.entries(b.a.reeds).forEach(([slot, r]) => { r.o.frequency.setTargetAtTime(reedHz(b, slot), now(), 0.08); r.oR.frequency.setTargetAtTime(reedHz(b, slot), now(), 0.08); }); renderBox(b); }
+function setOn(b, on) { b.on = on; if (b.radio) { if (on) radioConnect(b); else radioStop(b); } else applyReeds(b); renderBox(b); }
+const isHeld = b => b.rate <= HOLD_RATE;
+
+// ---------- radio ----------
+function radioLabel(b) { const r = b.radio, c = r.conn; if (!b.on || !c) return 'radio'; return c.ch.name + ' · ' + (r.status === 'quiet' && r.open ? 'voice' : r.status); }
+function radioStatus(b, s) { b.radio.status = s; renderBox(b); }
+function radioStop(b) {
+  const r = b.radio, c = r.conn; r.conn = null; r.open = false;
+  if (!c) return;
+  c.dead = true;
+  if (c.ws) { try { c.ws.onclose = null; c.ws.onerror = null; c.ws.close(); } catch (_) {} }
+  if (c.el) { c.el.pause(); c.el.src = ''; }
+  if (c.queue) c.queue.forEach(el => { el.pause(); el.src = ''; });
+  if (c.src) { try { c.src.disconnect(); } catch (_) {} }
+  if (b.a) b.a.gate.gain.setTargetAtTime(0, now(), 0.05);
+}
+function radioConnect(b) {
+  radioStop(b);
+  if (!b.on || !b.a) return;
+  const ch = radioChannel(b), c = { ch, dead: false };
+  b.radio.conn = c; b.radio.lastVoice = performance.now();
+  radioStatus(b, 'linking');
+  if (ch.kind === 'omhz') omhzStart(b, c); else streamStart(b, c);
+}
+function radioHop(b) { b.radio.scan = (b.radio.scan + 1) % CH_PER_BAND; radioConnect(b); }
+function radioGate(b, open) { const r = b.radio; if (open) r.lastVoice = performance.now(); if (open === r.open) return; r.open = open; if (b.a) b.a.gate.gain.setTargetAtTime(open ? 1 : 0, now(), open ? 0.02 : 0.3); renderBox(b); }
+// openmhz: Socket.IO over a raw WebSocket (Engine.IO 4). The clips are cross-origin without CORS, so they play beside the engine; the bellows sets their volume.
+function omhzStart(b, c) {
+  const ch = c.ch; c.queue = []; c.playing = null;
+  const open = () => {
+    if (c.dead) return;
+    const ws = new WebSocket('wss://api.openmhz.com/socket.io/?EIO=4&transport=websocket'); c.ws = ws;
+    ws.onmessage = m => {
+      const d = m.data;
+      if (d[0] === '0') ws.send('40');
+      else if (d.startsWith('40')) { ws.send('42' + JSON.stringify(['start', { filterCode: ch.tg || '', filterType: ch.tg ? 'talkgroup' : 'all', filterName: 'OpenMHz', filterStarred: false, shortName: ch.sys }])); radioStatus(b, 'quiet'); }
+      else if (d === '2') ws.send('3');
+      else if (d.startsWith('42')) { const [ev, p] = JSON.parse(d.slice(2)); if (ev === 'new message') omhzEnqueue(b, c, JSON.parse(p)); }
+    };
+    ws.onclose = () => { if (!c.dead) setTimeout(open, 3000); };
+  };
+  open();
+  fetch('https://api.openmhz.com/' + ch.sys + '/calls' + (ch.tg ? '?filter-type=talkgroup&filter-code=' + ch.tg.join(',') : ''))
+    .then(r => r.json()).then(j => { if (!c.dead && j.calls && j.calls[0] && !c.playing && !c.queue.length) omhzEnqueue(b, c, j.calls[0]); }).catch(() => {});
+}
+function omhzEnqueue(b, c, call) {
+  if (c.dead || !call.url || (call.len || 0) < minCallS(b)) return;
+  const el = new Audio(call.url); el.preload = 'auto'; el.volume = 0;
+  c.queue.push(el); while (c.queue.length > BACKLOG) c.queue.shift().src = '';
+  omhzPlayNext(b, c);
+}
+function omhzPlayNext(b, c) {
+  if (c.dead || c.playing || !c.queue.length) return;
+  const el = c.queue.shift(); c.playing = el; c.el = el;
+  const done = () => { if (c.playing !== el) return; c.playing = null; el.src = ''; radioGate(b, false); omhzPlayNext(b, c); };
+  el.onended = done; el.onerror = done;
+  el.play().then(() => radioGate(b, true)).catch(done);
+}
+function streamStart(b, c) {
+  if (c.src) { try { c.src.disconnect(); } catch (_) {} }
+  const el = new Audio(); el.crossOrigin = 'anonymous'; el.preload = 'auto'; el.src = c.ch.url; c.el = el;
+  c.src = ac.createMediaElementSource(el); c.an = ac.createAnalyser(); c.an.fftSize = 1024; c.buf = new Float32Array(1024);
+  c.src.connect(c.an); c.src.connect(b.a.radioIn);
+  el.play().then(() => radioStatus(b, 'quiet')).catch(() => radioStatus(b, 'blocked'));
+  el.onerror = () => { if (!c.dead) setTimeout(() => { if (!c.dead) streamStart(b, c); }, 5000); };
+}
+function radioTick(b, p) {
+  const r = b.radio, c = r.conn; if (!c || !b.on) return;
+  if (c.ch.kind === 'stream' && c.an) { c.an.getFloatTimeDomainData(c.buf); let e = 0; for (let i = 0; i < c.buf.length; i++) e += c.buf[i] * c.buf[i]; radioGate(b, Math.sqrt(e / c.buf.length) > 0.004 * Math.pow(30, r.squelch)); }
+  if (c.ch.kind === 'omhz' && c.playing) c.playing.volume = Math.min(1, 1.5 * Math.pow(p, 1.35) * b.vol * b.vol * P.level);   // beside the engine: follow the app's Level by hand
+  if (!r.hold && performance.now() - r.lastVoice > SCAN_AFTER_S[c.ch.kind] * 1000) radioHop(b);
+}
+function setBand(b, id) { const i = BANDS.findIndex(x => x.id === id); if (i < 0 || i === b.radio.band) return; b.radio.band = i; b.radio.scan = 0; renderBox(b); if (b.on) radioConnect(b); }
+function setHold(b, on) { b.radio.hold = on; b.radio.lastVoice = performance.now(); renderBox(b); }
+
+// ---------- panel ----------
+const host = $('boxes');
+[2, 3, 4].forEach(n => {
+  const R = n === 4, el = document.createElement('section'); el.className = 'head';
+  const k3 = R ? ['channel', 'Channel'] : ['grit', 'Grit'], k6 = R ? ['squelch', 'Squelch'] : ['pan', 'Pan'];
+  const knob = (id, label) => `<div class="mini" data-fx="${id}"><span>${label}</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>`;
+  el.innerHTML = `<div class="btns"><div class="tog pw" role="switch"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Box ${n}</div><button class="oct" title="${R ? 'stay on this channel; off = move on when it has been quiet' : 'drop this box one octave'}">${R ? 'hold' : '1 oct ↓'}</button></div>
+    <div class="vsw" title="${R ? 'city' : 'voice'}: click to step, drag to turn"><div class="vlabels"></div><div class="vk"><div class="vptr"></div></div></div>
+    <div class="fx">${knob('pump', 'Pump')}${knob('drive', 'Drive')}${knob(k3[0], k3[1])}${knob('room', 'Room')}${knob('level', 'Level')}${knob(k6[0], k6[1])}</div>`;
+  host.appendChild(el);
+  const b = { n, el, on: false, rate: 0.35, voice: 'reed', drive: 0, grit: 0, room: 0.25, vol: 0.8, oct: false, pan: { 2: -0.2, 3: 0.2, 4: 0.6 }[n], pressure: 0, target: 0, phase: Math.random(), a: null,
+    nameEl: el.querySelector('.n'), pw: el.querySelector('.pw'), octBtn: el.querySelector('.oct'), vsw: el.querySelector('.vsw'), vptr: el.querySelector('.vptr'),
+    radio: R ? { band: 0, chf: 0, scan: 0, squelch: 0.2, hold: false, conn: null, status: 'off', open: false, lastVoice: 0 } : null };
+  boxes.push(b);
+  b.pw.addEventListener('pointerdown', e => { e.preventDefault(); ensure(); setOn(b, !b.on); });
+  b.octBtn.addEventListener('click', () => { ensure(); if (R) setHold(b, !b.radio.hold); else setOct(b, !b.oct); });
+  const ids = R ? BANDS.map(x => x.id) : Object.keys(VOICES), labs = el.querySelector('.vlabels');
+  const curIdx = () => R ? b.radio.band : ids.indexOf(b.voice), pick = i => R ? setBand(b, ids[i]) : setVoice(b, ids[i]);
+  const ang = i => -135 + i * 270 / (ids.length - 1);
+  b.vlab = ids.map((id, i) => { const d = document.createElement('div'); d.textContent = R ? BANDS[i].name : VOICES[id].name; const a = (ang(i) - 90) * Math.PI / 180; d.style.left = (80 + 64 * Math.cos(a)) + 'px'; d.style.top = (66 + 44 * Math.sin(a)) + 'px'; labs.appendChild(d); return d; });
+  let vdrag = null, vy0 = 0, vi0 = 0, vmoved = false;
+  b.vsw.addEventListener('pointerdown', e => { ensure(); try { b.vsw.setPointerCapture(e.pointerId); } catch (_) {} vdrag = e.pointerId; vy0 = e.clientY; vi0 = curIdx(); vmoved = false; });
+  b.vsw.addEventListener('pointermove', e => { if (vdrag !== e.pointerId) return; const step = Math.round((vy0 - e.clientY) / 28); if (step !== 0) vmoved = true; const i = Math.max(0, Math.min(ids.length - 1, vi0 + step)); if (i !== curIdx()) pick(i); });
+  b.vsw.addEventListener('pointerup', e => { if (vdrag !== e.pointerId) return; vdrag = null; if (!vmoved) pick((curIdx() + 1) % ids.length); });
+  b.vsw.addEventListener('pointercancel', () => vdrag = null);
+  const dial = (id, get, set, fmt) => miniDial(el.querySelector(`[data-fx=${id}]`), get, set, fmt);
+  dial('pump', () => Math.log(b.rate / RATE_MIN) / Math.log(RATE_MAX / RATE_MIN), f => { b.rate = RATE_MIN * Math.pow(RATE_MAX / RATE_MIN, f); renderBox(b); });
+  dial('drive', () => b.drive, v => { b.drive = v; if (b.a) b.a.shaper.curve = driveCurve(v); });
+  dial('room', () => b.room, v => { b.room = v; if (b.a) b.a.send.gain.setTargetAtTime(v, now(), 0.05); });
+  dial('level', () => b.vol, v => { b.vol = v; if (b.a) b.a.level.gain.setTargetAtTime(v * v, now(), 0.05); });
+  if (R) {
+    dial('channel', () => b.radio.chf, v => { const was = radioIndex(b); b.radio.chf = v; b.radio.scan = 0; if (radioIndex(b) !== was) { renderBox(b); clearTimeout(b.radio.retune); b.radio.retune = setTimeout(() => { if (b.on) radioConnect(b); }, 400); } });
+    dial('squelch', () => b.radio.squelch, v => { b.radio.squelch = v; });
+  } else {
+    dial('grit', () => b.grit, v => { b.grit = v; if (b.a) { b.a.fold.curve = gritCurve(v); b.a.pres.gain.setTargetAtTime(14 * v, now(), 0.05); } });
+    dial('pan', () => (b.pan + 1) / 2, v => { b.pan = v * 2 - 1; if (b.a) b.a.pan.pan.setTargetAtTime(b.pan, now(), 0.05); });
+  }
+  renderBox(b);
+});
+function renderBox(b) {
+  b.nameEl.innerHTML = 'Box ' + b.n + (b.radio ? '<small>' + radioLabel(b) + '</small>' : '');
+  b.pw.classList.toggle('on', b.on);
+  const nIds = b.radio ? BANDS.length : Object.keys(VOICES).length, i = b.radio ? b.radio.band : Object.keys(VOICES).indexOf(b.voice);
+  b.vptr.style.setProperty('--r', (-135 + i * 270 / (nIds - 1)) + 'deg'); b.vlab.forEach((d, k) => d.classList.toggle('on', k === i));
+  b.octBtn.classList.toggle('on', b.radio ? b.radio.hold : b.oct);
+}
+
+// ---------- bellows ----------
+let last = performance.now();
+function tick() {
+  const t = performance.now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
+  if (S) boxes.forEach(b => {
+    const held = b.on && isHeld(b);
+    if (held) { if (b.heldBase == null) b.heldBase = b.pressure; b.target = Math.min(1.05, b.heldBase); }
+    else { b.heldBase = null; if (b.on) { b.phase += dt * b.rate; const s = Math.sin(b.phase * 2 * Math.PI), depth = (0.22 + 0.12 * Math.min(1, b.rate / 2)) * 2 * BREATH; b.target = Math.min(1.05, 0.38 + 0.45 * V + depth * Math.sign(s) * Math.pow(Math.abs(s), 0.6)); } else b.target = 0; }
+    const k = b.target > b.pressure ? Math.max(4.5, b.rate * 9) : Math.max(1.1, b.rate * 5);
+    b.pressure += (b.target - b.pressure) * Math.min(1, k * dt);
+    const p = Math.max(0, Math.min(1.05, b.pressure)), a = b.a, at = now();
+    a.pressure.gain.setTargetAtTime(Math.pow(p, 1.35), at, 0.03);
+    a.lp.frequency.setTargetAtTime(((700 + 2200 * p) * (0.35 + 0.65 * V) + 400 * V) * VOICES[b.voice].lp * (1 + 1.6 * b.grit), at, 0.05);
+    a.ngain.gain.setTargetAtTime((0.012 + 0.03 * V) * p, at, 0.05);
+    a.bend.offset.setTargetAtTime(-9 * p, at, 0.05);
+    const pre = 1 + (b.drive * 9 + Math.pow(b.drive, 3) * 30) * (0.35 + 0.85 * p);
+    a.pre.gain.setTargetAtTime(pre, at, 0.05); a.post.gain.setTargetAtTime(1 / Math.pow(pre, 0.62), at, 0.05);
+    if (b.radio) radioTick(b, p);
+  });
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+})();
 </script>
 </body>
 </html>
