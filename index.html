@@ -57,7 +57,8 @@
   /* knobs */
   .fx { display:grid; grid-template-columns:repeat(3, 64px); justify-content:center; gap:18px 22px; margin-top:16px; margin-bottom:6px; }
   .fx.six { grid-template-columns:repeat(6, 64px); }
-  @media (max-width: 1250px) { .fx.six { grid-template-columns:repeat(3, 64px); } }
+  .fx.seven { grid-template-columns:repeat(7, 64px); gap:18px 18px; }
+  @media (max-width: 1250px) { .fx.six, .fx.seven { grid-template-columns:repeat(3, 64px); } }
   .mini { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:8px; letter-spacing:.2em; }
   .mini .md { position:relative; width:38px; height:38px; border-radius:50%; background:radial-gradient(circle at 50% 30%, var(--knob1), var(--knob2) 65%, var(--knob3)); box-shadow:0 6px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); cursor:ns-resize; touch-action:none; }
   .mini .md .arc { position:absolute; inset:-6px; border-radius:50%; pointer-events:none; }
@@ -139,7 +140,8 @@
     <div class="voices">
       <section class="head" id="kick">
         <div class="btns"><div class="tog on" id="kick-on"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Kick <small>two tones, dead short</small></div><span></span></div>
-        <div class="fx six">
+        <div class="fx seven">
+          <div class="mini" data-k="throw"><span>Throw</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
           <div class="mini" data-k="tune"><span>Tune</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
           <div class="mini" data-k="partner"><span>Partner</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
           <div class="mini" data-k="decay"><span>Decay</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
@@ -197,7 +199,7 @@ const expo = (a, b, f) => a * Math.pow(b / a, f);
 // ---------- state ----------
 const P = {
   bpm: 65, loose: 0, level: 1.0,
-  kickOn: true, tune: 52, partner: 0.8, decay: 0.072, knock: 0.06, room: 0.15, klevel: 0.9,
+  kickOn: true, throw: 0, tune: 52, partner: 0.8, decay: 0.072, knock: 0.06, room: 0.15, klevel: 0.9,
   dustOn: true, density: 4, bright: 3000, dlevel: 0.5,
   swellOn: false, every: 10, dark: 1200, slevel: 0.4,
   mutate: false, running: false,
@@ -210,7 +212,7 @@ function loadPattern(name) {
 }
 
 // ---------- audio ----------
-let ac = null, master, limiter, drive, kickBus, roomSend, roomConv, dustHP, dustGain, swellLP, swellGain, noiseBuf, clickBufs = [];
+let ac = null, master, limiter, drive, kickBus, throwSend, throwDl, throwFb, throwLp, throwOut, roomSend, roomConv, dustHP, dustGain, swellLP, swellGain, noiseBuf, clickBufs = [];
 function ensureAudio() {
   if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
   ac = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
@@ -222,6 +224,12 @@ function ensureAudio() {
   drive.connect(limiter); limiter.connect(master); master.connect(ac.destination);
 
   kickBus = ac.createGain(); kickBus.gain.value = P.klevel; kickBus.connect(drive);
+  // Throw: a send into one dotted-eighth dub echo on the grid, every repeat darker, the echoes sitting in the room too (the Heart's throw in Shruti 4)
+  throwSend = ac.createGain(); throwSend.gain.value = P.throw * P.throw;
+  throwDl = ac.createDelay(2); throwDl.delayTime.value = 3 * stepDur();
+  throwLp = ac.createBiquadFilter(); throwLp.type = 'lowpass'; throwLp.frequency.value = 2600; throwFb = ac.createGain(); throwFb.gain.value = 0.5;
+  throwSend.connect(throwDl); throwDl.connect(throwLp); throwLp.connect(throwFb); throwFb.connect(throwDl);
+  throwOut = ac.createGain(); throwOut.gain.value = 0.8; throwDl.connect(throwOut); throwOut.connect(drive);
   // short dark room: 0.9 s decaying noise, lowpassed, as a send
   roomConv = ac.createConvolver();
   const irLen = Math.floor(0.9 * sr), ir = ac.createBuffer(2, irLen, sr);
@@ -229,6 +237,7 @@ function ensureAudio() {
   roomConv.buffer = ir;
   roomSend = ac.createGain(); roomSend.gain.value = P.room;
   roomSend.connect(roomConv); roomConv.connect(drive);
+  { const g = ac.createGain(); g.gain.value = 0.35; throwOut.connect(g); g.connect(roomSend); }
 
   dustHP = ac.createBiquadFilter(); dustHP.type = 'highpass'; dustHP.frequency.value = P.bright; dustHP.Q.value = 0.7;
   dustGain = ac.createGain(); dustGain.gain.value = P.dlevel * 0.012;
@@ -249,7 +258,7 @@ function ensureAudio() {
 
 function kick(t, v) {
   const f0 = P.tune, tau = P.decay, g = ac.createGain();
-  g.connect(kickBus); g.connect(roomSend);
+  g.connect(kickBus); g.connect(roomSend); g.connect(throwSend);
   // tone 1: f0+4 gliding to f0
   const o1 = ac.createOscillator(); o1.type = 'sine';
   o1.frequency.setValueAtTime(f0 + 4, t); o1.frequency.setTargetAtTime(f0, t, 0.04);
@@ -354,9 +363,10 @@ function miniDial(root, get, set, fmt) {
 }
 const K = sel => document.querySelector(sel);
 const readout = () => { $('readout').innerHTML = `<b>${Math.round(P.bpm)}</b> bpm · 16th grid · 4 bars`; };
-miniDial($('tempo'), () => (P.bpm - 50) / 40, f => { P.bpm = 50 + f * 40; readout(); });
+miniDial($('tempo'), () => (P.bpm - 50) / 40, f => { P.bpm = 50 + f * 40; readout(); if (throwDl) throwDl.delayTime.setTargetAtTime(3 * stepDur(), ac.currentTime, 0.05); });
 miniDial($('swing'), () => P.loose, f => { P.loose = f; });
 miniDial($('level'), () => P.level / 1.5, f => { P.level = f * 1.5; if (master) master.gain.setTargetAtTime(P.level, ac.currentTime, 0.02); });
+miniDial(K('[data-k=throw]'), () => P.throw, f => { P.throw = f; if (throwSend) throwSend.gain.setTargetAtTime(f * f, ac.currentTime, 0.02); });
 miniDial(K('[data-k=tune]'), () => (P.tune - 40) / 30, f => { P.tune = 40 + f * 30; });
 miniDial(K('[data-k=partner]'), () => P.partner, f => { P.partner = f; });
 miniDial(K('[data-k=decay]'), () => Math.log(P.decay / 0.03) / Math.log(0.3 / 0.03), f => { P.decay = expo(0.03, 0.3, f); });
