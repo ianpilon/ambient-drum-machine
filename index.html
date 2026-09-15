@@ -77,7 +77,7 @@
   @media (max-width: 1700px) { .head:not(#kick) .n small { display:none; } }
   @media (max-width: 1000px) { .head .n small { display:none; } }
 
-  /* Shruti boxes under the sequencer: a reed or pad voice behind a bellows (Box 2, Box 3) and the Radio box (Box 4) */
+  /* Boxes under the sequencer: a reed or pad voice behind a bellows (Box 2), the Hvit pad (Box 3) and the Radio box (Box 4) */
   .boxes { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
   @media (max-width: 900px) { .boxes { grid-template-columns:1fr; } }
   .boxes .head { padding-bottom:14px; }
@@ -382,7 +382,7 @@ buildGrid(); loadPattern('calm'); readout();
 </script>
 <script>
 'use strict';
-// ---------- Shruti boxes: Box 2 and Box 3 are drone voices behind a bellows, Box 4 is the Radio box. Ported from generativeVibeBox/shruti-panel.html.
+// ---------- Shruti boxes: Box 2 is a drone voice behind a bellows, Box 4 is the Radio box. Ported from generativeVibeBox/shruti-panel.html. Box 3 (the Hvit pad) is its own script below.
 // They share this app's audio context, drive stage, limiter and Level knob. Header controls of the original are fixed here:
 // interval = fifth, Age 0.42, Breath 0.5, Width 0.5, fader at the middle. No fader, no ribbon, no sync.
 (() => {
@@ -599,7 +599,7 @@ function setHold(b, on) { b.radio.hold = on; b.radio.lastVoice = performance.now
 
 // ---------- panel ----------
 const host = $('boxes');
-[2, 3, 4].forEach(n => {
+[2, 4].forEach(n => {
   const R = n === 4, el = document.createElement('section'); el.className = 'head';
   const k3 = R ? ['channel', 'Channel'] : ['grit', 'Grit'], k6 = R ? ['squelch', 'Squelch'] : ['pan', 'Pan'];
   const knob = (id, label) => `<div class="mini" data-fx="${id}"><span>${label}</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>`;
@@ -663,6 +663,139 @@ function tick() {
     a.pre.gain.setTargetAtTime(pre, at, 0.05); a.post.gain.setTargetAtTime(1 / Math.pow(pre, 0.62), at, 0.05);
     if (b.radio) radioTick(b, p);
   });
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+})();
+</script>
+<script>
+'use strict';
+// ---------- Box 3: the Hvit pad. The first 95 s of SVLBRD "Hvit" is one static chord, E9sus4, and this rebuilds what the analysis found:
+// near-sine tones (triangle through a 24 dB/oct lowpass at 700 Hz), a ±40 cent six-voice halo on the upper notes and a narrow pair on the bass,
+// a slow two-rate pitch swirl (0.7 and 1.4 Hz), a 12 s breath of about 3 dB, bass in the middle and upper voices split left/right, a long dark hall.
+// Sits between Box 2 and Box 4 and shares the app's drive stage, limiter and Level knob.
+(() => {
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+const N = (m, w = 1, wide = true) => ({ m, w, wide });
+const HVIT = [N(47, 0.09, false), N(52, 0.8, false), N(57, 0.35), N(59, 1), N(64, 0.9), N(66, 0.45), N(69, 0.4), N(71, 0.45)];   // B2 E3 A3 B3 E4 F#4 A4 B4, weights from the measured peaks
+const CHORDS = {
+  hollow: { name: 'Hollow', notes: [N(52, 0.8, false), N(59, 1), N(64, 0.9), N(71, 0.5)] },
+  hvit:   { name: 'Hvit',   notes: HVIT },
+  major:  { name: 'Major',  notes: HVIT.concat([N(68, 0.4)]) },      // the G#4 that surfaces at 16 to 28 s
+  minor:  { name: 'Minor',  notes: HVIT.concat([N(55, 0.4)]) },      // the G3 that creeps in after 68 s
+  glass:  { name: 'Glass',  notes: [N(64, 0.9), N(66, 0.5), N(69, 0.45), N(71, 0.5), N(76, 0.3), N(78, 0.2)] },
+};
+const WIDE = { off: [-35, -15, -8, 0, 8, 30], g: [0.3, 0.6, 1, 1, 0.6, 0.35] };
+const NARROW = { off: [-8, 8], g: [1, 1] };
+const LFO_HZ = [0.55, 0.7, 0.85, 1.1, 1.4, 1.7, 0.62, 1.25];
+const BREATH_S = 12;
+const now = () => ac.currentTime;
+const b = { n: 3, on: false, chord: 'hvit', oct: false, spread: 0.67, swirl: 0.5, dark: 0.37, breathe: 0.5, room: 0.5, vol: 0.7, phase: Math.random(), a: null };
+const darkHz = () => 300 * Math.pow(10, b.dark);          // 300 Hz to 3 kHz, 700 Hz at the default
+const spreadScale = () => b.spread * 1.5;                 // ×1 at the default: the halo as measured
+const swirlCents = () => b.swirl * 20;
+
+function ensure() {
+  ensureAudio();
+  if (b.a) return;
+  const g = v => { const n = ac.createGain(); n.gain.value = v; return n; };
+  const a = { g, sets: [] };
+  a.lp1 = ac.createBiquadFilter(); a.lp1.type = 'lowpass'; a.lp1.frequency.value = darkHz(); a.lp1.Q.value = 0.54;
+  a.lp2 = ac.createBiquadFilter(); a.lp2.type = 'lowpass'; a.lp2.frequency.value = darkHz(); a.lp2.Q.value = 1.31;   // together a 4th-order Butterworth
+  a.breath = g(1); a.env = g(0); a.level = g(b.vol * b.vol * 0.11);
+  a.lp1.connect(a.lp2).connect(a.breath).connect(a.env).connect(a.level).connect(drive);
+  // long dark hall: 7 s stereo noise tail, one-pole lowpassed while it is written, then a 1.8 kHz lowpass on the way out
+  a.conv = ac.createConvolver();
+  const sr = ac.sampleRate, len = Math.floor(7 * sr), ir = ac.createBuffer(2, len, sr);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); let lp = 0; for (let i = 0; i < len; i++) { lp += (Math.random() * 2 - 1 - lp) * 0.12; d[i] = lp * Math.exp(-6.91 * i / len); } }
+  a.conv.buffer = ir;
+  a.revLp = ac.createBiquadFilter(); a.revLp.type = 'lowpass'; a.revLp.frequency.value = 1800; a.revLp.Q.value = 0.5;
+  a.revHp = ac.createBiquadFilter(); a.revHp.type = 'highpass'; a.revHp.frequency.value = 220; a.revHp.Q.value = 0.5;   // the hall carries the upper voices; the root stays dry and in the middle
+  a.send = g(b.room * 1.2); a.revOut = g(0.8);
+  a.level.connect(a.send).connect(a.revHp).connect(a.conv).connect(a.revLp).connect(a.revOut).connect(drive);
+  a.lfos = LFO_HZ.map(f => { const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f; o.start(); return o; });
+  b.a = a;
+  buildChord();
+}
+function buildChord() {
+  const a = b.a, g = a.g, set = { voices: [], merge: ac.createChannelMerger(2), out: g(0) };
+  set.merge.connect(set.out).connect(a.lp1);
+  let k = 0;
+  CHORDS[b.chord].notes.forEach(n => {
+    const U = n.wide ? WIDE : NARROW, norm = Math.sqrt(U.g.reduce((s, v) => s + v * v, 0));
+    U.off.forEach((off, i) => {
+      const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = hz(n.m) * (b.oct ? 0.5 : 1); o.detune.value = off * spreadScale();
+      const lg = g(swirlCents() * (n.wide ? 1 : 0.5)); a.lfos[(k * 3 + i) % a.lfos.length].connect(lg).connect(o.detune);
+      const vg = g(n.w * U.g[i] / norm); o.connect(vg);
+      if (n.wide) vg.connect(set.merge, 0, i % 2); else { vg.connect(set.merge, 0, 0); vg.connect(set.merge, 0, 1); }   // bass stays in the middle, as on the record
+      o.start(); set.voices.push({ o, off, lg, wide: n.wide });
+    });
+    k++;
+  });
+  a.sets.push(set);
+  set.out.gain.setTargetAtTime(1, now(), 0.6);
+}
+function dropChord(set) {
+  const t = now(); set.out.gain.cancelScheduledValues(t); set.out.gain.setValueAtTime(set.out.gain.value, t); set.out.gain.linearRampToValueAtTime(0, t + 1.2);
+  setTimeout(() => { set.voices.forEach(v => { v.o.stop(); v.lg.disconnect(); }); set.out.disconnect(); }, 1500);
+}
+function setChord(id) {
+  if (!CHORDS[id] || id === b.chord) return;
+  b.chord = id; render();
+  if (!b.a) return;
+  b.a.sets.splice(0).forEach(dropChord); buildChord();
+}
+function setOct(on) { b.oct = on; render(); if (b.a) b.a.sets.forEach(s => s.voices.forEach(v => v.o.frequency.setTargetAtTime(v.o.frequency.value * (on ? 0.5 : 2), now(), 0.08))); }
+function setOn(on) {
+  b.on = on; render(); if (!b.a) return;
+  const t = now(), gn = b.a.env.gain; gn.cancelScheduledValues(t); gn.setValueAtTime(gn.value, t);
+  gn.linearRampToValueAtTime(on ? 1 : 0, t + (on ? 6 : 3));     // the record fades in over 20 s; six is enough for an instrument
+}
+function eachVoice(f) { if (b.a) b.a.sets.forEach(s => s.voices.forEach(f)); }
+
+// ---------- panel ----------
+const host = $('boxes'), el = document.createElement('section'); el.className = 'head';
+const knob = (id, label) => `<div class="mini" data-fx="${id}"><span>${label}</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>`;
+el.innerHTML = `<div class="btns"><div class="tog pw" role="switch"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Box 3</div><button class="oct" title="drop the chord one octave">1 oct ↓</button></div>
+  <div class="vsw" title="chord: click to step, drag to turn"><div class="vlabels"></div><div class="vk"><div class="vptr"></div></div></div>
+  <div class="fx">${knob('spread', 'Spread')}${knob('swirl', 'Swirl')}${knob('dark', 'Dark')}${knob('breathe', 'Breathe')}${knob('room', 'Room')}${knob('level', 'Level')}</div>`;
+host.insertBefore(el, host.lastElementChild);       // between Box 2 and Box 4
+const nameEl = el.querySelector('.n'), pw = el.querySelector('.pw'), octBtn = el.querySelector('.oct'), vsw = el.querySelector('.vsw'), vptr = el.querySelector('.vptr');
+pw.addEventListener('pointerdown', e => { e.preventDefault(); ensure(); setOn(!b.on); });
+octBtn.addEventListener('click', () => { ensure(); setOct(!b.oct); });
+const ids = Object.keys(CHORDS), labs = el.querySelector('.vlabels');
+const curIdx = () => ids.indexOf(b.chord), pick = i => setChord(ids[i]);
+const ang = i => -135 + i * 270 / (ids.length - 1);
+const vlab = ids.map((id, i) => { const d = document.createElement('div'); d.textContent = CHORDS[id].name; const a = (ang(i) - 90) * Math.PI / 180; d.style.left = (80 + 64 * Math.cos(a)) + 'px'; d.style.top = (66 + 44 * Math.sin(a)) + 'px'; labs.appendChild(d); return d; });
+let vdrag = null, vy0 = 0, vi0 = 0, vmoved = false;
+vsw.addEventListener('pointerdown', e => { ensure(); try { vsw.setPointerCapture(e.pointerId); } catch (_) {} vdrag = e.pointerId; vy0 = e.clientY; vi0 = curIdx(); vmoved = false; });
+vsw.addEventListener('pointermove', e => { if (vdrag !== e.pointerId) return; const step = Math.round((vy0 - e.clientY) / 28); if (step !== 0) vmoved = true; const i = Math.max(0, Math.min(ids.length - 1, vi0 + step)); if (i !== curIdx()) pick(i); });
+vsw.addEventListener('pointerup', e => { if (vdrag !== e.pointerId) return; vdrag = null; if (!vmoved) pick((curIdx() + 1) % ids.length); });
+vsw.addEventListener('pointercancel', () => vdrag = null);
+const dial = (id, get, set) => miniDial(el.querySelector(`[data-fx=${id}]`), get, set);
+dial('spread', () => b.spread, v => { b.spread = v; eachVoice(x => x.o.detune.setTargetAtTime(x.off * spreadScale(), now(), 0.05)); });
+dial('swirl', () => b.swirl, v => { b.swirl = v; eachVoice(x => x.lg.gain.setTargetAtTime(swirlCents() * (x.wide ? 1 : 0.5), now(), 0.05)); });
+dial('dark', () => b.dark, v => { b.dark = v; });
+dial('breathe', () => b.breathe, v => { b.breathe = v; });
+dial('room', () => b.room, v => { b.room = v; if (b.a) b.a.send.gain.setTargetAtTime(v * 1.2, now(), 0.05); });
+dial('level', () => b.vol, v => { b.vol = v; if (b.a) b.a.level.gain.setTargetAtTime(v * v * 0.11, now(), 0.05); });
+function render() {
+  nameEl.innerHTML = 'Box 3<small>hvit pad</small>';
+  pw.classList.toggle('on', b.on); octBtn.classList.toggle('on', b.oct);
+  const i = curIdx(); vptr.style.setProperty('--r', ang(i) + 'deg'); vlab.forEach((d, k) => d.classList.toggle('on', k === i));
+}
+render();
+
+// ---------- breath: about 3 dB and a fifth of the cutoff, over 12 s ----------
+let last = performance.now();
+function tick() {
+  const t = performance.now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
+  if (b.a) {
+    b.phase += dt / BREATH_S;
+    const p = Math.sin(b.phase * 2 * Math.PI), at = now(), fc = darkHz() * (1 + 0.25 * b.breathe * p);
+    b.a.breath.gain.setTargetAtTime(Math.pow(10, (3 * b.breathe * p) / 20), at, 0.1);
+    b.a.lp1.frequency.setTargetAtTime(fc, at, 0.1); b.a.lp2.frequency.setTargetAtTime(fc, at, 0.1);
+  }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
