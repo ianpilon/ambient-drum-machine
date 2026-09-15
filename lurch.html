@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lurch</title>
+<style>
+  :root {
+    --page:#e9e9e6; --face1:#dcdcd9; --face2:#c6c6c3; --panel1:#e4e4e1; --panel2:#d8d8d5; --hair:rgba(0,0,0,.14);
+    --ink:#2a2a2a; --dim:#7a7a78; --track:#b9b9b6; --track-in:rgba(0,0,0,.35); --slot:#1a1a1a; --ribbon:#bdbdba;
+    --knob1:#3c3c3c; --knob2:#1a1a1a; --knob3:#0d0d0d; --index:#f4f4f2; --slider1:#3a3a3a; --slider2:#161616;
+    --held:#e8622a; --tick:rgba(0,0,0,.35); --hi:rgba(255,255,255,.8); --shadow:rgba(0,0,0,.35);
+    --pad0:#cfcfcc; --pad1:#a3a3a0; --pad2:#5e5e5c; --pad3:#1a1a1a;
+    color-scheme: light;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--page); color:var(--ink); font:13px/1.3 "Inter", -apple-system, system-ui, "Helvetica Neue", sans-serif; display:flex; flex-direction:column; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none; }
+  .chassis { flex:1; min-height:0; display:flex; }
+  .face { flex:1; min-height:0; display:flex; flex-direction:column; gap:10px; padding:18px 20px 12px; position:relative; border-radius:22px; background:linear-gradient(180deg, var(--face1), var(--face2)); box-shadow:0 30px 60px var(--shadow), 0 2px 0 var(--hi) inset, 0 0 0 1px rgba(0,0,0,.18); }
+
+  .n, .sw div.lab, .mini, .tog, .hdr-btn, .cap, .synclab, .barlab, .rl { color:var(--ink); font-weight:500; letter-spacing:.12em; text-transform:uppercase; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 22px; padding:4px 4px 12px; border-bottom:1px solid var(--hair); }
+  header > span:first-child { display:flex; align-items:baseline; gap:12px; font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); flex:0 0 auto; }
+  header b { font-weight:600; font-size:15px; letter-spacing:.22em; color:var(--ink); }
+  @media (max-width: 1100px) { header > span:first-child > span { display:none; } }
+  .switches { display:flex; align-items:center; gap:22px; flex:0 0 auto; }
+  .syncgrp { display:flex; align-items:center; gap:10px; }
+  .synclab { font-size:9px; letter-spacing:.22em; }
+  header .btns { margin-left:auto; gap:16px; flex-wrap:nowrap; flex:0 1 auto; }
+  .btns { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  header .mini { flex-direction:row; gap:6px; }
+
+  .tog { display:flex; align-items:center; gap:6px; height:30px; cursor:pointer; touch-action:manipulation; font-size:8px; letter-spacing:.2em; }
+  .tog .track { position:relative; width:44px; height:18px; border-radius:999px; background:var(--track); box-shadow:inset 0 1px 3px var(--track-in), 0 1px 0 var(--hi); }
+  .tog .lever { position:absolute; top:2px; left:2px; width:20px; height:14px; border-radius:999px; background:linear-gradient(180deg, var(--slider1), var(--slider2)); box-shadow:0 2px 4px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.15); transition:left .12s; }
+  .tog.on .lever { left:22px; }
+  .tog.big { height:34px; font-size:9px; letter-spacing:.22em; gap:8px; }
+  .tog.big .track { width:58px; height:22px; }
+  .tog.big .lever { top:2px; left:2px; width:24px; height:18px; }
+  .tog.big.on .lever { left:32px; }
+
+  .hdr-btn { height:30px; padding:0 14px; border:1px solid var(--hair); border-radius:999px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi), 0 1px 2px rgba(0,0,0,.08); font:inherit; font-size:8px; letter-spacing:.2em; cursor:pointer; color:var(--ink); }
+  .hdr-btn:active { background:var(--track); }
+
+  .fx { display:grid; grid-template-columns:repeat(3, 64px); justify-content:center; gap:18px 22px; margin-top:16px; margin-bottom:6px; }
+  .fx.six { grid-template-columns:repeat(6, 64px); }
+  @media (max-width: 1350px) { .fx.six { grid-template-columns:repeat(3, 64px); } }
+  .mini { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:8px; letter-spacing:.2em; }
+  .mini .md { position:relative; width:38px; height:38px; border-radius:50%; background:radial-gradient(circle at 50% 30%, var(--knob1), var(--knob2) 65%, var(--knob3)); box-shadow:0 6px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); cursor:ns-resize; touch-action:none; }
+  .mini .md .arc { position:absolute; inset:-6px; border-radius:50%; pointer-events:none; }
+  .mini .md .arc::before { content:""; position:absolute; inset:0; border-radius:50%; background:repeating-conic-gradient(from 225deg, var(--dim) 0 2deg, transparent 2deg 27deg); -webkit-mask:radial-gradient(circle, transparent 80%, #000 81%, #000 92%, transparent 93%), conic-gradient(from 225deg, #000 0 272deg, transparent 272deg); -webkit-mask-composite:source-in; mask:radial-gradient(circle, transparent 80%, #000 81%, #000 92%, transparent 93%), conic-gradient(from 225deg, #000 0 272deg, transparent 272deg); mask-composite:intersect; }
+  .mini .md .ptr { position:absolute; left:50%; top:50%; width:2px; height:12px; margin:-15px 0 0 -1px; border-radius:1px; background:var(--index); transform-origin:50% 15px; transform:rotate(var(--r, -135deg)); pointer-events:none; }
+  .mini output { display:none; }
+
+  main { flex:1; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr); gap:10px; }
+  .voices { display:grid; grid-template-columns:2fr 2fr 1fr; gap:10px; }
+  @media (max-width: 900px) { .voices { grid-template-columns:1fr; } }
+  .head { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 6px 10px; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi), 0 1px 2px rgba(0,0,0,.08); }
+  .head .n { font-size:9px; letter-spacing:.3em; line-height:30px; text-align:center; }
+  .head .n small { color:var(--dim); letter-spacing:.06em; text-transform:none; margin-left:6px; }
+  .head .btns { position:relative; width:100%; display:flex; align-items:center; height:30px; gap:0; padding:0 4px; }
+  .head .btns .n { position:absolute; left:0; right:0; pointer-events:none; }
+  @media (max-width: 1700px) { .head:not(#rule) .n small { display:none; } }
+  @media (max-width: 1000px) { .head .n small { display:none; } }
+
+  /* lower: ribbon | pattern | ribbon */
+  .lower { display:grid; grid-template-columns:110px minmax(0,1fr) 110px; gap:10px; min-height:0; }
+  @media (max-width: 900px) { .lower { grid-template-columns:70px minmax(0,1fr) 70px; } }
+  .seq { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-rows:auto auto 1fr auto; gap:6px 10px; padding:14px 16px 12px; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi); min-height:0; }
+  .seq .cap { font-size:8px; letter-spacing:.22em; color:var(--dim); }
+  .seq .cap.top { grid-column:2; grid-row:1; display:grid; grid-template-columns:repeat(16, minmax(0,1fr)); gap:4px; text-align:center; }
+  .seq .cap.top span:nth-child(4n+1) { color:var(--ink); }
+  .seq .bars { grid-column:1; grid-row:2; display:grid; grid-template-rows:repeat(4, minmax(26px, 72px)); align-content:start; gap:6px; align-items:center; }
+  .barlab { font-size:8px; letter-spacing:.22em; color:var(--dim); white-space:nowrap; }
+  .grid { grid-column:2; grid-row:2; display:grid; grid-template-rows:repeat(4, minmax(26px, 72px)); align-content:start; gap:6px; min-height:0; }
+  .row { display:grid; grid-template-columns:repeat(16, minmax(0,1fr)); gap:4px; min-height:0; }
+  .row .pad:nth-child(4n) { margin-right:6px; }
+  .row .pad:nth-child(16) { margin-right:0; }
+  .pad { position:relative; min-height:26px; border-radius:8px; background:var(--pad0); box-shadow:inset 0 1px 3px rgba(0,0,0,.28), 0 1px 0 var(--hi); transition:background .08s; }
+  .pad[data-v="1"] { background:var(--pad1); box-shadow:inset 0 1px 2px rgba(0,0,0,.35); }
+  .pad[data-v="2"] { background:var(--pad2); box-shadow:0 3px 6px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.12); }
+  .pad[data-v="3"] { background:var(--pad3); box-shadow:0 4px 8px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12); }
+  .pad::after { content:""; position:absolute; left:8px; right:8px; bottom:5px; height:2px; border-radius:1px; background:transparent; }
+  .pad.now::after { background:var(--tick); }
+  .pad.now[data-v]:not([data-v="0"])::after { background:var(--held); }
+  .seq .foot { grid-column:1 / -1; grid-row:4; display:flex; justify-content:space-between; align-items:center; font-size:8px; letter-spacing:.22em; color:var(--dim); text-transform:uppercase; padding-top:2px; }
+  .seq .foot b { font-weight:500; color:var(--ink); }
+  .seq .formula { grid-column:1 / -1; grid-row:3; align-self:end; font:10px/1.5 ui-monospace, "SF Mono", Menlo, monospace; color:var(--dim); letter-spacing:0; text-transform:none; padding:10px 4px 0; white-space:pre-wrap; }
+  .seq .formula b { color:var(--ink); font-weight:500; }
+
+  .ribbon { position:relative; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi); overflow:hidden; cursor:pointer; touch-action:none; min-height:220px; }
+  .ribbon::before { content:""; position:absolute; top:28px; bottom:28px; left:27%; right:27%; border-radius:12px; background:var(--ribbon); box-shadow:inset 0 1px 3px rgba(0,0,0,.3); }
+  .ribbon .rl { position:absolute; left:0; right:0; text-align:center; font-size:7px; letter-spacing:.18em; pointer-events:none; }
+  .ribbon .rl.t { top:8px; } .ribbon .rl.b { bottom:8px; }
+  .ribbon .dot { position:absolute; left:50%; width:30px; height:30px; margin:-15px 0 0 -15px; border-radius:50%; background:rgba(127,127,127,.25); border:1px solid rgba(127,127,127,.5); opacity:0; pointer-events:none; }
+  .ribbon.touch .dot { opacity:1; border-color:var(--held); }
+</style>
+</head>
+<body>
+<div class="chassis"><div class="face">
+  <header>
+    <span><b>LURCH</b><span>generative ambient drum machine · one formula under the hood</span></span>
+    <div class="switches">
+      <div class="syncgrp"><span class="synclab">Run</span><div class="tog big" id="run" role="switch"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div></div>
+      <div class="syncgrp"><span class="synclab">Freeze</span><div class="tog big" id="freeze" role="switch" title="Hold this pass: no drift until released"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div></div>
+      <button class="hdr-btn" id="reseed">Reseed</button>
+    </div>
+    <div class="btns">
+      <div class="mini" id="tempo"><span>Tempo</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+      <div class="mini" id="loose"><span>Loose</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+      <div class="mini" id="room"><span>Room</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+      <div class="mini" id="level"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="voices">
+      <section class="head" id="rule">
+        <div class="btns"><span></span><div class="n">Rule <small>the pattern is computed, never drawn</small></div></div>
+        <div class="fx six">
+          <div class="mini" data-k="seed"><span>Seed</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="hits"><span>Hits</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="lurch"><span>Lurch</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="sparse"><span>Sparse</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="holes"><span>Holes</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="drift"><span>Drift</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+        </div>
+      </section>
+      <section class="head" id="kick">
+        <div class="btns"><div class="tog on" id="kick-on"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Kick <small>two tones, dead short</small></div></div>
+        <div class="fx six">
+          <div class="mini" data-k="tune"><span>Tune</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="partner"><span>Partner</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="decay"><span>Decay</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="knock"><span>Knock</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="accent"><span>Accent</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="klevel"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+        </div>
+      </section>
+      <section class="head" id="dust">
+        <div class="btns"><div class="tog on" id="dust-on"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Dust</div></div>
+        <div class="fx">
+          <div class="mini" data-k="density"><span>Density</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="bright"><span>Bright</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+          <div class="mini" data-k="dlevel"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="lower">
+      <div class="ribbon" id="rib-space" title="Hold to thin the pattern out; let go to return"><div class="rl t">Empty</div><div class="rl b">Full</div><div class="dot"></div></div>
+      <section class="seq" id="seq">
+        <div class="cap top" id="steps"></div>
+        <div class="bars"><div class="barlab">Bar 1</div><div class="barlab">Bar 2</div><div class="barlab">Bar 3</div><div class="barlab">Bar 4</div></div>
+        <div class="grid" id="grid"></div>
+        <div class="formula" id="formula"></div>
+        <div class="foot"><span>What the rule is playing this pass. Nothing here is editable by hand.</span><span id="readout"><b>65</b> bpm · pass 0</span></div>
+      </section>
+      <div class="ribbon" id="rib-weight" title="Hold to lean on the kick; let go to return"><div class="rl t">Heavy</div><div class="rl b">Light</div><div class="dot"></div></div>
+    </div>
+  </main>
+</div></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const expo = (a, b, f) => a * Math.pow(b / a, f);
+
+// ---------- the rule, shared verbatim with the audio thread ----------
+const RULE_SRC = `
+const H = (seed, n) => { const v = (Math.sin((n + seed * 131.71) * 12.9898) * 43758.5453) % 1; return v < 0 ? v + 1 : v; };
+const euclid = (k, n) => { let out = 0, b = 0; for (let i = 0; i < n; i++) { b += k; if (b >= n) { b -= n; out |= 1 << i; } } return out; };
+// velocity 0..1 for a global 16th-step index, from the rule and its knobs. No memory anywhere.
+function rule(step, p) {
+  const bar = step >> 4, i = step & 15, loopbar = bar & 3, pass = step >> 6, seed = p.seed;
+  const base = euclid(Math.round(p.hits), 16);
+  const rot = Math.floor(H(seed, bar * 7 + 1) * 8 * p.lurch);          // lurch: rotate the Euclid pattern per bar
+  let hit = (base >> ((i + rot) & 15)) & 1;
+  if (i === 4 || i === 12) hit = 0;                                       // never on 2 and 4
+  const keep = (1 - p.sparse) * ((loopbar & 1) ? (1 - p.holes) : 1);     // holes: bars 2 and 4 go empty first
+  if (H(seed, step * 3 + 2) > keep) hit = 0;
+  const flips = Math.round(p.drift * 3);                                  // drift: flip up to 3 "e"/"a" steps per pass
+  for (let f = 0; f < flips; f++) { const fs = Math.floor(H(seed, (p.freeze ? 0 : pass) * 11 + f + 0.5) * 64); if ((step & 63) === fs && (fs % 4 === 1 || fs % 4 === 3)) hit ^= 1; }
+  if (!hit) return 0;
+  return 1 - p.accent * H(seed, step * 5 + 3) * 0.85;                     // accent: how wide the velocity range is
+}`;
+const RULE = new Function(RULE_SRC + '; return { rule, H };')();
+
+// ---------- audio thread: the whole voice is a formula of (t, step, u) ----------
+const WORKLET_SRC = RULE_SRC + `
+class Lurch extends AudioWorkletProcessor {
+  constructor() { super(); this.p = null; this.step = -1; this.u = 0; this.S = 1; this.t = 0; this.hp = 0; this.hx = 0; this.run = false; this.v = 0; this.jit = 0;
+    this.port.onmessage = e => { if (e.data.p) this.p = e.data.p; if ('run' in e.data) { this.run = e.data.run; if (this.run) { this.step = -1; this.u = 1e9; } } }; }
+  process(inputs, outputs) {
+    const p = this.p; if (!p) return true;
+    const K = outputs[0][0], D = outputs[1][0], sr = sampleRate;
+    this.S = sr * 60 / p.bpm / 4;
+    for (let n = 0; n < K.length; n++) {
+      if (!this.run) { K[n] = 0; D[n] = 0; continue; }
+      if (this.u >= this.S) { this.u -= this.S; if (this.u >= this.S) this.u = 0; this.step++; this.port.postMessage({ step: this.step }); this.v = rule(this.step, p) * p.kickOn; this.jit = H(p.seed, this.step * 13 + 5) * p.loose * 0.03 * sr; }
+      const u = this.u - this.jit; let k = 0;
+      if (this.v > 0 && u >= 0) {
+        const w = p.weight, v = this.v * (0.6 + 0.4 * w), tau = p.decay * sr, g = 4 * 0.04 * (1 - Math.exp(-u / (0.04 * sr)));
+        k = v * (0.6 * Math.sin(6.2831853 * (p.tune * u / sr + g)) * Math.exp(-u / tau)
+             + 0.48 * p.partner * Math.sin(6.2831853 * (p.tune * 1.66 * u / sr + 1.5 * g)) * Math.exp(-u / (tau * 0.62))
+             + p.knock * (H(1, this.t) * 2 - 1) * Math.exp(-u / (0.012 * sr)));
+      }
+      K[n] = k * p.klevel;
+      let d = 0;
+      if (p.dustOn && H(2, this.t >> 3) < p.density * 8 / sr) { const a = H(3, this.t >> 3); d = (H(4, this.t) * 2 - 1) * a * a * Math.exp(-(this.t & 7) / 3); }
+      const a = Math.exp(-6.2831853 * p.bright / sr); this.hp = a * (this.hp + d - this.hx); this.hx = d;   // one-pole high-pass, the only state in the dust
+      D[n] = this.hp * p.dlevel * 0.25;
+      this.u++; this.t++;
+    }
+    return true;
+  }
+}
+registerProcessor('lurch', Lurch);`;
+
+const P = {
+  bpm: 65, loose: 0, room: 0.15, level: 1.0,
+  seed: 7, hits: 6, lurch: 0.5, sparse: 0.35, holes: 0.6, drift: 0.33, freeze: false,
+  kickOn: 1, tune: 52, partner: 0.8, decay: 0.072, knock: 0.05, accent: 0.6, klevel: 0.9, weight: 0.5,
+  dustOn: 1, density: 4, bright: 3000, dlevel: 0.5,
+  running: false,
+};
+let ac = null, node, drive, limiter, master, roomSend, roomConv, kickBus, engineKind = '';
+// The same engine source runs either in an AudioWorklet (https, http) or, when a file:// page is refused a worklet module, on a ScriptProcessor in this thread.
+async function makeEngine() {
+  try {
+    const url = URL.createObjectURL(new Blob([WORKLET_SRC], { type: 'application/javascript' }));
+    await ac.audioWorklet.addModule(url);
+    const n = new AudioWorkletNode(ac, 'lurch', { numberOfInputs: 0, numberOfOutputs: 2, outputChannelCount: [1, 1] });
+    engineKind = 'worklet'; return n;
+  } catch (err) {
+    engineKind = 'scriptprocessor';
+    let Proc = null; const stubs = { registerProcessor: (_, cls) => { Proc = cls; } };
+    class AudioWorkletProcessor { constructor() { this.port = { onmessage: null, postMessage: null }; } }
+    new Function('sampleRate', 'AudioWorkletProcessor', 'registerProcessor', WORKLET_SRC)(ac.sampleRate, AudioWorkletProcessor, stubs.registerProcessor);
+    const inst = new Proc();
+    const sp = ac.createScriptProcessor(2048, 0, 2), split = ac.createChannelSplitter(2);
+    sp.connect(split);
+    sp.onaudioprocess = e => { const o = e.outputBuffer; inst.process([], [[o.getChannelData(0)], [o.getChannelData(1)]]); };
+    const port = { onmessage: null, postMessage: d => inst.port.onmessage && inst.port.onmessage({ data: d }) };
+    inst.port.postMessage = d => { if (port.onmessage) setTimeout(() => port.onmessage({ data: d }), 0); };
+    return { port, connect: (dest, idx) => split.connect(dest, idx || 0), _sp: sp };
+  }
+}
+let spaceHold = null, weightHold = null;                 // ribbons override sparse / weight while held
+function sendParams() { if (!node) return; const p = Object.assign({}, P); if (spaceHold !== null) p.sparse = spaceHold; if (weightHold !== null) p.weight = weightHold; node.port.postMessage({ p }); }
+async function ensureAudio() {
+  if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+  ac = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  node = await makeEngine();
+  node.port.onmessage = e => onStep(e.data.step);
+  limiter = ac.createDynamicsCompressor(); limiter.threshold.value = -3; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.001; limiter.release.value = 0.08;
+  master = ac.createGain(); master.gain.value = P.level;
+  drive = ac.createGain(); drive.gain.value = 2.5;
+  drive.connect(limiter); limiter.connect(master); master.connect(ac.destination);
+  kickBus = ac.createGain(); kickBus.connect(drive);
+  node.connect(kickBus, 0); node.connect(drive, 1);
+  roomConv = ac.createConvolver(); const sr = ac.sampleRate, irLen = Math.floor(0.9 * sr), ir = ac.createBuffer(2, irLen, sr);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); let lp = 0; for (let i = 0; i < irLen; i++) { lp += (Math.random() * 2 - 1 - lp) * 0.08; d[i] = lp * Math.pow(1 - i / irLen, 3); } }
+  roomConv.buffer = ir; roomSend = ac.createGain(); roomSend.gain.value = P.room;
+  kickBus.connect(roomSend); roomSend.connect(roomConv); roomConv.connect(drive);
+  sendParams();
+}
+
+// ---------- display: what the rule is playing this pass ----------
+const pads = []; let curPass = 0, lastMark = -1;
+function buildGrid() {
+  const g = $('grid'), cap = $('steps');
+  for (let i = 0; i < 16; i++) { const s = document.createElement('span'); s.textContent = i % 4 === 0 ? (i / 4 + 1) : ['', 'e', '&', 'a'][i % 4]; cap.appendChild(s); }
+  for (let r = 0; r < 4; r++) { const row = document.createElement('div'); row.className = 'row'; for (let c = 0; c < 16; c++) { const p = document.createElement('div'); p.className = 'pad'; p.dataset.v = 0; row.appendChild(p); pads.push(p); } g.appendChild(row); }
+}
+function effectiveParams() { const p = Object.assign({}, P); if (spaceHold !== null) p.sparse = spaceHold; return p; }
+function renderPattern() {
+  const p = effectiveParams();
+  for (let i = 0; i < 64; i++) { const v = RULE.rule(curPass * 64 + i, p); pads[i].dataset.v = v === 0 ? 0 : v > 0.66 ? 3 : v > 0.33 ? 2 : 1; }
+  $('readout').innerHTML = `<b>${Math.round(P.bpm)}</b> bpm · pass ${curPass} · seed ${P.seed}`;
+}
+function onStep(step) {
+  const pass = step >> 6; if (pass !== curPass) { curPass = pass; renderPattern(); }
+  const i = step & 63; if (lastMark >= 0) pads[lastMark].classList.remove('now'); pads[i].classList.add('now'); lastMark = i;
+}
+function renderFormula() {
+  $('formula').innerHTML = `<b>hit(step)</b> = euclid(${Math.round(P.hits)},16)[(step + lurch·H(bar)) mod 16] · [step mod 16 ∉ {4,12}] · [H(step) &lt; (1−${P.sparse.toFixed(2)})·(bar odd ? 1−${P.holes.toFixed(2)} : 1)] ⊕ drift(pass)\n<b>kick(u)</b> = v·(0.6·sin(2π·${Math.round(P.tune)}·u + glide)·e^(−u/${Math.round(P.decay * 1000)}ms) + ${P.partner.toFixed(2)}·0.48·sin(2π·${Math.round(P.tune * 1.66)}·u)·e^(−u/${Math.round(P.decay * 620)}ms) + knock)     <b>dust(t)</b> = [H(t≫3) &lt; ${P.density.toFixed(1)}/s]·noise(t)·e^(−(t&amp;7)/3)`;
+}
+
+// ---------- controls ----------
+function miniDial(root, get, set) {
+  const md = root.querySelector('.md');
+  const render = () => { md.style.setProperty('--r', (-135 + get() * 270) + 'deg'); };
+  let id = null, y0 = 0, f0 = 0;
+  md.addEventListener('pointerdown', e => { ensureAudio(); try { md.setPointerCapture(e.pointerId); } catch (_) {} id = e.pointerId; y0 = e.clientY; f0 = get(); });
+  md.addEventListener('pointermove', e => { if (id !== e.pointerId) return; set(clamp(f0 + (y0 - e.clientY) / 140, 0, 1)); render(); after(); });
+  const up = e => { if (id === e.pointerId) id = null; };
+  md.addEventListener('pointerup', up); md.addEventListener('pointercancel', up);
+  md.addEventListener('wheel', e => { e.preventDefault(); set(clamp(get() - e.deltaY / 600, 0, 1)); render(); after(); }, { passive: false });
+  render(); return render;
+}
+function after() { sendParams(); renderPattern(); renderFormula(); }
+const K = sel => document.querySelector(sel);
+miniDial($('tempo'), () => (P.bpm - 50) / 40, f => { P.bpm = 50 + f * 40; });
+miniDial($('loose'), () => P.loose, f => { P.loose = f; });
+miniDial($('room'), () => P.room / 0.6, f => { P.room = f * 0.6; if (roomSend) roomSend.gain.setTargetAtTime(P.room, ac.currentTime, 0.02); });
+miniDial($('level'), () => P.level / 1.5, f => { P.level = f * 1.5; if (master) master.gain.setTargetAtTime(P.level, ac.currentTime, 0.02); });
+miniDial(K('[data-k=hits]'), () => (P.hits - 2) / 6, f => { P.hits = 2 + f * 6; });
+miniDial(K('[data-k=lurch]'), () => P.lurch, f => { P.lurch = f; });
+miniDial(K('[data-k=sparse]'), () => P.sparse, f => { P.sparse = f; });
+miniDial(K('[data-k=holes]'), () => P.holes, f => { P.holes = f; });
+miniDial(K('[data-k=drift]'), () => P.drift, f => { P.drift = f; });
+miniDial(K('[data-k=tune]'), () => (P.tune - 40) / 30, f => { P.tune = 40 + f * 30; });
+miniDial(K('[data-k=partner]'), () => P.partner, f => { P.partner = f; });
+miniDial(K('[data-k=decay]'), () => Math.log(P.decay / 0.03) / Math.log(0.3 / 0.03), f => { P.decay = expo(0.03, 0.3, f); });
+miniDial(K('[data-k=knock]'), () => P.knock / 0.3, f => { P.knock = f * 0.3; });
+miniDial(K('[data-k=accent]'), () => P.accent, f => { P.accent = f; });
+miniDial(K('[data-k=klevel]'), () => P.klevel, f => { P.klevel = f; });
+miniDial(K('[data-k=density]'), () => Math.log(P.density / 0.5) / Math.log(20 / 0.5), f => { P.density = expo(0.5, 20, f); });
+miniDial(K('[data-k=bright]'), () => Math.log(P.bright / 1500) / Math.log(9000 / 1500), f => { P.bright = expo(1500, 9000, f); });
+miniDial(K('[data-k=dlevel]'), () => P.dlevel, f => { P.dlevel = f; });
+
+function toggle(id, key, num) { const el = $(id); el.addEventListener('pointerdown', e => { e.preventDefault(); ensureAudio(); P[key] = num ? (P[key] ? 0 : 1) : !P[key]; el.classList.toggle('on', !!P[key]); after(); }); }
+toggle('kick-on', 'kickOn', true); toggle('dust-on', 'dustOn', true); toggle('freeze', 'freeze', false);
+$('reseed').addEventListener('pointerdown', e => { e.preventDefault(); P.seed = Math.floor(Math.random() * 100); seedRender(); after(); });
+const seedRender = miniDial(K('[data-k=seed]'), () => P.seed / 99, f => { P.seed = Math.round(f * 99); });
+async function setRunning(on) {
+  P.running = on; $('run').classList.toggle('on', on);
+  if (on) { await ensureAudio(); curPass = 0; renderPattern(); node.port.postMessage({ run: true }); }
+  else { if (node) node.port.postMessage({ run: false }); if (lastMark >= 0) pads[lastMark].classList.remove('now'); lastMark = -1; }
+}
+$('run').addEventListener('pointerdown', e => { e.preventDefault(); setRunning(!P.running); });
+window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); setRunning(!P.running); } });
+
+// ribbons: momentary, return on release
+function ribbon(el, onMove, onRelease) {
+  const dot = el.querySelector('.dot'); let id = null;
+  const pos = e => { const r = el.getBoundingClientRect(); const f = clamp((e.clientY - r.top - 28) / (r.height - 56), 0, 1); dot.style.top = (28 + f * (r.height - 56)) + 'px'; return f; };
+  el.addEventListener('pointerdown', e => { ensureAudio(); try { el.setPointerCapture(e.pointerId); } catch (_) {} id = e.pointerId; el.classList.add('touch'); onMove(pos(e)); });
+  el.addEventListener('pointermove', e => { if (id !== e.pointerId) return; onMove(pos(e)); });
+  const up = e => { if (id !== e.pointerId) return; id = null; el.classList.remove('touch'); onRelease(); };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+}
+ribbon($('rib-space'), f => { spaceHold = 1 - f; sendParams(); renderPattern(); }, () => { spaceHold = null; sendParams(); renderPattern(); });
+ribbon($('rib-weight'), f => { weightHold = 1 - f; sendParams(); }, () => { weightHold = null; sendParams(); });
+
+buildGrid(); renderPattern(); renderFormula();
+</script>
+</body>
+</html>

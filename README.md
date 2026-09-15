@@ -17,4 +17,21 @@ Open `index.html` in a browser. No build, no server, no dependencies. Press spac
 
 Tap a step to cycle rest, soft, mid, loud.
 
+## Lurch: the generative version
+
+**Play it:** https://ianpilon.github.io/ambient-drum-machine/lurch.html
+
+`lurch.html` keeps the same kick and dust but throws away the step grid. Nothing is drawn by hand: a single stateless formula of the step index decides every hit, and the panel shows you what that formula is playing this pass. The rule is a bytebeat-style remix of what the analysis found:
+
+- **Hits** picks a Euclidean pattern E(k,16). At k=6 that is two tresillos per bar, the dotted-eighth chain that runs through the source.
+- **Lurch** rotates that pattern by a hash of the bar number, so each bar lands somewhere different.
+- **Sparse** erases hits by hash. **Holes** erases harder in bars 2 and 4, which is where the source goes quiet.
+- **Drift** flips up to three "e" and "a" steps per pass, so the loop never repeats exactly. **Freeze** holds the current pass.
+- **Seed** changes every hash at once. **Reseed** rolls a new one.
+- Beats 2 and 4 are never allowed a hit.
+
+The two ribbons are momentary: **Empty / Full** thins the pattern out while held, **Heavy / Light** leans on the kick. Let go and it returns.
+
+The engine runs per-sample in an AudioWorklet on http and https. On a file:// page the browser refuses worklet modules, so the identical code runs on a ScriptProcessor instead.
+
 The panel reuses the visual language and controls of [Shruti 4](https://github.com/ianpilon/shruti-4).
