@@ -69,7 +69,7 @@
 
   /* layout */
   main { flex:1; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:10px; }
-  .voices { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+  .voices { display:grid; grid-template-columns:2fr 1fr; gap:10px; }
   @media (max-width: 900px) { .voices { grid-template-columns:1fr; } }
   .head { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 6px 10px; border:1px solid var(--hair); border-radius:16px; background:linear-gradient(180deg, var(--panel1), var(--panel2)); box-shadow:inset 0 1px 0 var(--hi), 0 1px 2px rgba(0,0,0,.08); }
   .head .n { font-size:9px; letter-spacing:.3em; line-height:30px; text-align:center; }
@@ -160,14 +160,6 @@
           <div class="mini" data-k="dlevel"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
         </div>
       </section>
-      <section class="head" id="swell">
-        <div class="btns"><div class="tog" id="swell-on"><span>off</span><div class="track"><div class="lever"></div></div><span>on</span></div><div class="n">Swell <small>the wash that isn't a crash</small></div><span></span></div>
-        <div class="fx">
-          <div class="mini" data-k="every"><span>Every</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
-          <div class="mini" data-k="dark"><span>Dark</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
-          <div class="mini" data-k="slevel"><span>Level</span><div class="md"><div class="arc"></div><div class="ptr"></div></div><output></output></div>
-        </div>
-      </section>
     </div>
 
     <section class="seq" id="seq">
@@ -203,7 +195,6 @@ const P = {
   bpm: 65, loose: 0, level: 1.0,
   kickOn: true, throw: 0, thump: 0, tune: 52, partner: 0.8, decay: 0.072, knock: 0.06, room: 0.15, klevel: 0.9,
   dustOn: true, density: 4, bright: 3000, dlevel: 0.5,
-  swellOn: false, every: 10, dark: 1200, slevel: 0.4,
   mutate: false, running: false,
 };
 let seq = new Array(STEPS).fill(0);
@@ -214,7 +205,7 @@ function loadPattern(name) {
 }
 
 // ---------- audio ----------
-let ac = null, master, limiter, drive, kickBus, throwSend, throwDl, throwFb, throwLp, throwOut, roomSend, roomConv, thumpCurve, dustHP, dustGain, swellLP, swellGain, noiseBuf, clickBufs = [];
+let ac = null, master, limiter, drive, kickBus, throwSend, throwDl, throwFb, throwLp, throwOut, roomSend, roomConv, thumpCurve, dustHP, dustGain, noiseBuf, clickBufs = [];
 function ensureAudio() {
   if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
   ac = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
@@ -246,9 +237,6 @@ function ensureAudio() {
   dustGain = ac.createGain(); dustGain.gain.value = P.dlevel * 0.012;
   dustHP.connect(dustGain); dustGain.connect(drive);
 
-  swellLP = ac.createBiquadFilter(); swellLP.type = 'lowpass'; swellLP.frequency.value = P.dark; swellLP.Q.value = 0.5;
-  swellGain = ac.createGain(); swellGain.gain.value = P.slevel * 0.05;
-  swellLP.connect(swellGain); swellGain.connect(drive);
 
   noiseBuf = ac.createBuffer(1, Math.floor(0.1 * sr), sr);
   { const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
@@ -291,17 +279,9 @@ function click(t) {
   const g = ac.createGain(); const a = Math.random(); g.gain.value = a * a;
   s.connect(g); g.connect(dustHP); s.start(t);
 }
-function swell(t) {
-  const notes = [587.3, 659.3, 740, 784, 880];         // D5 E5 F#5 G5 A5, the drone's upper partials
-  const pick = notes.filter(() => Math.random() < 0.55);
-  if (!pick.length) pick.push(notes[1]);
-  const g = ac.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1 / pick.length, t + 0.4); g.gain.setTargetAtTime(0, t + 0.4, 0.55);
-  g.connect(swellLP);
-  pick.forEach(f => { const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * Math.pow(2, (Math.random() * 8 - 4) / 1200); o.connect(g); o.start(t); o.stop(t + 3.5); });
-}
 
 // ---------- scheduler ----------
-let step = 0, nextStepTime = 0, timer = null, nextDust = 0, nextSwell = 0, pass = 0;
+let step = 0, nextStepTime = 0, timer = null, nextDust = 0, pass = 0;
 const LOOK = 0.12, TICK = 25;
 function stepDur() { return 60 / P.bpm / 4; }
 function schedule() {
@@ -320,13 +300,11 @@ function schedule() {
   }
   if (P.dustOn) { while (nextDust < now + LOOK) { click(nextDust); nextDust += -Math.log(1 - Math.random()) / P.density; } }
   else nextDust = now + LOOK;
-  if (P.swellOn) { while (nextSwell < now + LOOK) { swell(nextSwell); nextSwell += P.every * (0.7 + Math.random() * 0.6); } }
-  else nextSwell = now + LOOK + 1;
 }
 function setRunning(on) {
   P.running = on; $('run').classList.toggle('on', on);
   if (on) {
-    ensureAudio(); step = 0; nextStepTime = ac.currentTime + 0.05; nextDust = nextStepTime; nextSwell = nextStepTime + 2;
+    ensureAudio(); step = 0; nextStepTime = ac.currentTime + 0.05; nextDust = nextStepTime;
     if (!timer) timer = setInterval(schedule, TICK);
   } else { clearInterval(timer); timer = null; markStep(-1); }
 }
@@ -385,12 +363,9 @@ miniDial(K('[data-k=klevel]'), () => P.klevel, f => { P.klevel = f; if (kickBus)
 miniDial(K('[data-k=density]'), () => Math.log(P.density / 0.5) / Math.log(20 / 0.5), f => { P.density = expo(0.5, 20, f); });
 miniDial(K('[data-k=bright]'), () => Math.log(P.bright / 1500) / Math.log(9000 / 1500), f => { P.bright = expo(1500, 9000, f); if (dustHP) dustHP.frequency.setTargetAtTime(P.bright, ac.currentTime, 0.02); });
 miniDial(K('[data-k=dlevel]'), () => P.dlevel, f => { P.dlevel = f; if (dustGain) dustGain.gain.setTargetAtTime(f * 0.012, ac.currentTime, 0.02); });
-miniDial(K('[data-k=every]'), () => (P.every - 4) / 16, f => { P.every = 4 + f * 16; });
-miniDial(K('[data-k=dark]'), () => Math.log(P.dark / 400) / Math.log(4000 / 400), f => { P.dark = expo(400, 4000, f); if (swellLP) swellLP.frequency.setTargetAtTime(P.dark, ac.currentTime, 0.02); });
-miniDial(K('[data-k=slevel]'), () => P.slevel, f => { P.slevel = f; if (swellGain) swellGain.gain.setTargetAtTime(f * 0.05, ac.currentTime, 0.02); });
 
 function toggle(id, key) { const el = $(id); el.addEventListener('pointerdown', e => { e.preventDefault(); ensureAudio(); P[key] = !P[key]; el.classList.toggle('on', P[key]); }); }
-toggle('kick-on', 'kickOn'); toggle('dust-on', 'dustOn'); toggle('swell-on', 'swellOn'); toggle('mutate', 'mutate');
+toggle('kick-on', 'kickOn'); toggle('dust-on', 'dustOn'); toggle('mutate', 'mutate');
 $('run').addEventListener('pointerdown', e => { e.preventDefault(); setRunning(!P.running); });
 $('clear').addEventListener('pointerdown', e => { e.preventDefault(); seq.fill(0); renderGrid(); });
 let patB = false;
